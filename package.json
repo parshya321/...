@@ -1,0 +1,15 @@
+{
+  "name": "anime-api",
+  "version": "1.0.0",
+  "description": "Telegram Mini App API for the anime catalog",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "mongodb": "^6.8.0"
+  }
+}
