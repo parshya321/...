@@ -253,7 +253,7 @@ async function banUser(db, id, reason) {
   const u = users.get(id); if (u) u.banned = true;
   await db.collection('users').updateOne({ _id: id }, { $set: { banned: true, ban_reason: reason, banned_at: new Date() } }, { upsert: true }).catch(() => {});
   log('AUTO-BAN', id, reason);
-  adminAlert(`🚫 Auto-ban: user ${id}\nWajah: ${reason}`);
+  adminAlert(`🚫 Auto-ban: user ${id}\nReason: ${reason}`);
 }
 
 /* ------------------------------------------------------------------ */
@@ -398,7 +398,7 @@ function createHandler(db) {
     const a = W.api.hit(id);
     if (a.count > CFG.lim.apiPerMin) {
       const b = W.blocked.hit(id);
-      if (b.count > CFG.lim.banBlockedPerMin) await banUser(db, id, `1 minute mein ${a.count}+ requests`);
+      if (b.count > CFG.lim.banBlockedPerMin) await banUser(db, id, `${a.count}+ requests in 1 minute`);
       fail(req, res, 429, 'slow_down', { retry: Math.ceil((a.reset - Date.now()) / 1000) });
       return null;
     }
@@ -455,7 +455,7 @@ function createHandler(db) {
     const body = await readJson(req);
     const id = ctx.id;
     const att = W.playAttempt5.hit(id);
-    if (att.count > CFG.lim.banPlayAttempts5Min) { await banUser(db, id, `5 minute mein ${att.count} episodes kholne ki koshish`); return fail(req, res, 403, 'banned'); }
+    if (att.count > CFG.lim.banPlayAttempts5Min) { await banUser(db, id, `tried to open ${att.count} episodes in 5 minutes`); return fail(req, res, 403, 'banned'); }
     if (W.play5.peek(id) >= CFG.lim.playPer5Min) return fail(req, res, 429, 'slow_down', { retry: 60 });
     if (W.playDay.peek(id) >= CFG.lim.playPerDay) return fail(req, res, 429, 'daily_limit');
 
@@ -483,6 +483,11 @@ function createHandler(db) {
     if (!opts.length) return fail(req, res, 404, 'no_video');
     W.play5.hit(id); W.playDay.hit(id);
     const token = makeToken(id, opts);
+    const key = body.episode ? `ep:${body.episode}` : `movie:${body.movie}`;
+    const short = body.episode ? label.split(' · ')[0] : 'Movie';
+    const prev = watching.get(id);
+    watching.set(id, { user: ctx.user, title: t.title, label: short, key, since: prev && prev.key === key ? prev.since : Date.now(), at: Date.now() });
+    try { db.collection('plays').insertOne({ ts: new Date(), user: id, title: t.title, slug: t.slug, type: t.type, label: short }).catch(() => {}); } catch (e) { /* stats kabhi play nahi rokenge */ }
     json(req, res, 200, {
       title: t.title, label, token,
       player: `/p/${token}`,
@@ -499,6 +504,21 @@ function createHandler(db) {
     const m = upd && upd.message;
     if (!m || !m.text || !m.chat) return;
     const app = CFG.miniAppUrl || CFG.publicUrl;
+    const fromId = m.from ? String(m.from.id) : '';
+    if (CFG.adminChat && fromId === String(CFG.adminChat) && ADMIN_CMDS.test(m.text)) {
+      try { await adminCommand(db, m.text, m.chat.id); } catch (e) { await tg(CFG.botToken, 'sendMessage', { chat_id: m.chat.id, text: 'Error: ' + e.message }); }
+      return;
+    }
+    if (/^\/start\b/.test(m.text) && m.from) {
+      try {
+        const r = await db.collection('bot_users').updateOne({ _id: fromId }, {
+          $set: { first_name: m.from.first_name || '', last_name: m.from.last_name || '', username: m.from.username || '', lang: m.from.language_code || '', last_start: new Date() },
+          $setOnInsert: { first_start: new Date() },
+          $inc: { starts: 1 },
+        }, { upsert: true });
+        if (r && r.upsertedCount && process.env.NOTIFY_NEW_USERS !== '0') adminAlert(`🆕 New user: ${who(m.from)}`);
+      } catch (e) { log('bot_users save fail', e.message); }
+    }
     if (/^\/start\b/.test(m.text) || /^\/help\b/.test(m.text)) {
       await tg(CFG.botToken, 'sendMessage', {
         chat_id: m.chat.id,
@@ -600,12 +620,123 @@ function createHandler(db) {
 
       if (p === '/api/play' && req.method === 'POST') return await play(req, res, ctx);
 
+      // player khula hai: har ~45 second "abhi dekh raha hai" update
+      if (p === '/api/ping' && req.method === 'POST') {
+        const w = watching.get(ctx.id);
+        if (w) w.at = Date.now();
+        return json(req, res, 200, { ok: true });
+      }
+
       return fail(req, res, 404, 'not_found');
     } catch (e) {
       log('ERROR', req.method, p, e.message);
       if (!res.headersSent) fail(req, res, 500, 'server_error');
     }
   };
+}
+
+/* ------------------------------------------------------------------ */
+/* Admin: kisne bot start kiya, kaun abhi dekh raha hai                */
+/* Ye commands public bot pe sirf ADMIN_CHAT_ID wale ke liye chalte hain */
+/* ------------------------------------------------------------------ */
+const watching = new Map(); // userId -> { user, title, label, key, since, at }
+const ONLINE_MS = 2 * 60e3;
+const ADMIN_CMDS = /^\/(admin|stats|online|users|top|user|ban|unban)\b/;
+
+function who(u) {
+  const name = [u.first_name, u.last_name].filter(Boolean).join(' ') || 'No name';
+  return `${name}${u.username ? ' @' + u.username : ''} (${u.id || u._id})`;
+}
+function ago(d) {
+  const s = Math.max(0, Math.round((Date.now() - new Date(d).getTime()) / 1000));
+  if (s < 60) return `${s}s ago`;
+  if (s < 3600) return `${Math.round(s / 60)} min ago`;
+  if (s < 86400) return `${Math.round(s / 3600)} h ago`;
+  return `${Math.round(s / 86400)} days ago`;
+}
+function todayStart() { // midnight India time
+  const off = 5.5 * 3600e3;
+  return new Date(Math.floor((Date.now() + off) / 86400e3) * 86400e3 - off);
+}
+function onlineList() {
+  const now = Date.now();
+  return [...watching.entries()].filter(([, w]) => now - w.at < ONLINE_MS).sort((a, b) => b[1].at - a[1].at);
+}
+
+async function adminText(db, text) {
+  const [cmd, arg] = text.trim().split(/\s+/);
+  const c = cmd.replace(/@.*$/, '').toLowerCase();
+  const day = todayStart();
+  if (c === '/admin') {
+    return ['Admin commands:', '/stats  : users, plays, watching now', '/online : who is watching right now', '/users  : latest 20 users who started the bot',
+      '/top    : most watched today', '/user <id> : details of one user', '/ban <id>   /unban <id>'].join('\n');
+  }
+  if (c === '/stats') {
+    const [botTotal, botToday, appTotal, appToday, playsToday, viewersToday] = await Promise.all([
+      db.collection('bot_users').countDocuments({}), db.collection('bot_users').countDocuments({ first_start: { $gte: day } }),
+      db.collection('users').countDocuments({}), db.collection('users').countDocuments({ last_seen: { $gte: day } }),
+      db.collection('plays').countDocuments({ ts: { $gte: day } }), db.collection('plays').distinct('user', { ts: { $gte: day } }),
+    ]);
+    return [
+      '📊 Infinite Animes stats',
+      `👥 Bot started: ${botTotal} total, ${botToday} new today`,
+      `📱 App opened: ${appTotal} total, ${appToday} active today`,
+      `▶️ Plays today: ${playsToday} by ${viewersToday.length} people`,
+      `🟢 Watching now: ${onlineList().length}`,
+      `🚫 Banned: ${banned.size}`,
+    ].join('\n');
+  }
+  if (c === '/online') {
+    const list = onlineList();
+    if (!list.length) return '🟢 Nobody is watching right now.';
+    return `🟢 Watching now (${list.length})\n\n` + list.slice(0, 40).map(([, w]) =>
+      `• ${who(w.user)}\n   ${w.title} ${w.label} · for ${Math.max(1, Math.round((Date.now() - w.since) / 60e3))} min`).join('\n');
+  }
+  if (c === '/users') {
+    const list = await db.collection('bot_users').find({}).sort({ last_start: -1 }).limit(20).toArray();
+    if (!list.length) return 'No users yet.';
+    const total = await db.collection('bot_users').countDocuments({});
+    return `👥 Latest users (${total} total)\n\n` + list.map((u) => `• ${who(u)}\n   joined ${ago(u.first_start)} · last /start ${ago(u.last_start)}`).join('\n');
+  }
+  if (c === '/top') {
+    const rows = await db.collection('plays').aggregate([
+      { $match: { ts: { $gte: day } } },
+      { $group: { _id: '$title', n: { $sum: 1 }, people: { $addToSet: '$user' } } },
+      { $sort: { n: -1 } }, { $limit: 15 },
+    ]).toArray();
+    if (!rows.length) return 'No plays today yet.';
+    return '🔥 Most watched today\n\n' + rows.map((r, i) => `${i + 1}. ${r._id}: ${r.n} plays, ${r.people.length} people`).join('\n');
+  }
+  if (c === '/user') {
+    if (!arg) return 'Use: /user <id>';
+    const [b, a, plays] = await Promise.all([
+      db.collection('bot_users').findOne({ _id: arg }), db.collection('users').findOne({ _id: arg }),
+      db.collection('plays').find({ user: arg }).sort({ ts: -1 }).limit(10).toArray(),
+    ]);
+    if (!b && !a) return 'User not found.';
+    const w = watching.get(arg);
+    return [
+      `👤 ${who(b || Object.assign({ id: arg }, a))}`,
+      b ? `Started bot ${ago(b.first_start)}, ${b.starts || 1} times` : 'Never sent /start',
+      a ? `Last opened app ${ago(a.last_seen)} · age: ${a.age || 'not asked'}` : 'Never opened the app',
+      a && a.banned ? '🚫 Banned' : '',
+      w && Date.now() - w.at < ONLINE_MS ? `🟢 Now watching: ${w.title} ${w.label}` : '',
+      plays.length ? '\nLast watched:\n' + plays.map((p) => `• ${p.title} ${p.label} · ${ago(p.ts)}`).join('\n') : '',
+    ].filter(Boolean).join('\n');
+  }
+  if (c === '/ban' || c === '/unban') {
+    if (!/^\d+$/.test(arg || '')) return `Use: ${c} <id>`;
+    const ban = c === '/ban';
+    await db.collection('users').updateOne({ _id: arg }, { $set: { banned: ban, ...(ban ? { ban_reason: 'admin', banned_at: new Date() } : {}) } }, { upsert: true });
+    if (ban) banned.add(arg); else banned.delete(arg);
+    const u = users.get(arg); if (u) u.banned = ban;
+    return ban ? `🚫 Banned ${arg}` : `✅ Unbanned ${arg}`;
+  }
+  return 'Unknown command. Send /admin';
+}
+async function adminCommand(db, text, chatId) {
+  const out = await adminText(db, text);
+  for (let i = 0; i < out.length; i += 3800) await tg(CFG.botToken, 'sendMessage', { chat_id: chatId, text: out.slice(i, i + 3800) });
 }
 
 /* ------------------------------------------------------------------ */
@@ -616,13 +747,13 @@ async function refresh(db) {
     { live: true, hidden: { $ne: true } },
     { projection: { servers: 0, downloads: 0, errors: 0, warnings: 0, flags: 0, fingerprint: 0 } },
   ).toArray();
-  if (!docs.length && store.list.length) { log('refresh: 0 titles mile, purana data rakha'); return; }
+  if (!docs.length && store.list.length) { log('refresh: got 0 titles, keeping old data'); return; }
   Object.assign(store, buildStore(docs));
   log(`catalog: ${store.list.length} titles (adult ${store.list.filter((t) => t.adult).length})`);
 }
 
 async function setupBot() {
-  if (!CFG.botToken || !CFG.publicUrl) { log('BOT_TOKEN ya PUBLIC_URL nahi: bot setup chhoda'); return; }
+  if (!CFG.botToken || !CFG.publicUrl) { log('BOT_TOKEN or PUBLIC_URL missing: skipped bot setup'); return; }
   const r = await tg(CFG.botToken, 'setWebhook', {
     url: `${CFG.publicUrl}/tg/${CFG.webhookSecret}`, secret_token: CFG.webhookSecret,
     allowed_updates: ['message'], drop_pending_updates: true,
@@ -634,15 +765,22 @@ async function setupBot() {
 }
 
 async function main() {
-  if (!CFG.mongo) throw new Error('MONGO_URI set nahi hai');
-  if (!CFG.botToken) log('WARNING: BOT_TOKEN nahi hai, koi bhi /api request pass nahi hogi');
+  if (!CFG.mongo) throw new Error('MONGO_URI is not set');
+  if (!CFG.botToken) log('WARNING: BOT_TOKEN is missing, every /api request will be rejected');
   const { MongoClient } = require('mongodb');
   const client = new MongoClient(CFG.mongo, { maxPoolSize: 20 });
   await client.connect();
   const db = client.db(CFG.dbName);
   log('MongoDB connected');
   await refresh(db);
-  const bans = await db.collection('users').find({ banned: true }, { projection: { _id: 1 } }).toArray();
+  await Promise.all([
+    db.collection('plays').createIndex({ ts: 1 }, { expireAfterSeconds: 30 * 86400 }),
+    db.collection('plays').createIndex({ user: 1, ts: -1 }),
+    db.collection('bot_users').createIndex({ last_start: -1 }),
+    db.collection('bot_users').createIndex({ first_start: -1 }),
+    db.collection('users').createIndex({ last_seen: -1 }),
+  ]).catch((e) => log('index error', e.message));
+  const bans =await db.collection('users').find({ banned: true }, { projection: { _id: 1 } }).toArray();
   bans.forEach((b) => banned.add(String(b._id)));
 
   setInterval(() => refresh(db).catch((e) => log('refresh error', e.message)), CFG.refreshSec * 1000);
@@ -650,6 +788,7 @@ async function main() {
     Object.values(W).forEach((w) => w.sweep());
     const now = Date.now();
     for (const [k, v] of tokens) if (now > v.exp) tokens.delete(k);
+    for (const [k, v] of watching) if (now - v.at > 30 * 60e3) watching.delete(k);
     if (users.size > 50000) users.clear();
   }, 60e3);
   // admin ne Atlas se ban/unban kiya ho to har 2 minute sync
@@ -664,11 +803,11 @@ async function main() {
   const server = http.createServer(createHandler(db));
   server.keepAliveTimeout = 65e3;
   server.headersTimeout = 66e3;
-  server.listen(CFG.port, () => log(`API chalu: port ${CFG.port}`));
+  server.listen(CFG.port, () => log(`API running on port ${CFG.port}`));
   setupBot().catch((e) => log('bot setup error', e.message));
 }
 
-module.exports = { checkInitData, buildStore, search, listTitles, serverOptions, playerHtml, createHandler, store, CFG, W, banned, users, tokens, norm, isAdult };
+module.exports = { adminText, watching, todayStart, checkInitData, buildStore, search, listTitles, serverOptions, playerHtml, createHandler, store, CFG, W, banned, users, tokens, norm, isAdult };
 
 if (require.main === module) {
   process.on('unhandledRejection', (e) => log('unhandledRejection', e && e.message));
