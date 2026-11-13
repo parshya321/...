@@ -358,16 +358,22 @@ const PUBLIC_DIR = path.join(__dirname, 'public');
 const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8',
   '.svg': 'image/svg+xml', '.png': 'image/png', '.jpg': 'image/jpeg', '.webp': 'image/webp', '.ico': 'image/x-icon', '.json': 'application/json' };
 const staticCache = new Map();
+// public/ folder na ho (phone se upload), to repo ke root wali index.html chalao. Root se sirf index.html, aur kuch nahi.
+const ROOT_INDEX = path.join(__dirname, 'index.html');
 function serveStatic(req, res, pathname) {
   let rel = decodeURIComponent(pathname).replace(/^\/+/, '');
   if (!rel || !path.extname(rel)) rel = 'index.html';
+  if (rel === 'index.html' && !fs.existsSync(path.join(PUBLIC_DIR, 'index.html')) && fs.existsSync(ROOT_INDEX)) {
+    if (!staticCache.has(ROOT_INDEX)) staticCache.set(ROOT_INDEX, { body: fs.readFileSync(ROOT_INDEX), type: MIME['.html'] });
+    return send(req, res, 200, staticCache.get(ROOT_INDEX).body, { 'content-type': MIME['.html'], 'cache-control': 'no-cache' });
+  }
   const file = path.normalize(path.join(PUBLIC_DIR, rel));
   if (!file.startsWith(PUBLIC_DIR)) return fail(req, res, 400, 'bad_path');
   let hit = staticCache.get(file);
   if (!hit) {
     if (!fs.existsSync(file)) {
       if (rel !== 'index.html') return fail(req, res, 404, 'not_found');
-      return send(req, res, 200, 'API chal raha hai. Mini App abhi upload nahi hua.', { 'content-type': 'text/plain; charset=utf-8' });
+      return send(req, res, 200, 'API is running. The Mini App file is not uploaded yet.', { 'content-type': 'text/plain; charset=utf-8' });
     }
     hit = { body: fs.readFileSync(file), type: MIME[path.extname(file)] || 'application/octet-stream' };
     staticCache.set(file, hit);
@@ -496,8 +502,8 @@ function createHandler(db) {
     if (/^\/start\b/.test(m.text) || /^\/help\b/.test(m.text)) {
       await tg(CFG.botToken, 'sendMessage', {
         chat_id: m.chat.id,
-        text: `Namaste ${m.from && m.from.first_name ? m.from.first_name : ''}! 👋\nNeeche button dabao aur anime dekho.`,
-        reply_markup: app ? { inline_keyboard: [[{ text: '▶️ Anime dekho', web_app: { url: app } }]] } : undefined,
+        text: `Hi ${m.from && m.from.first_name ? m.from.first_name : ''}! 👋\nWelcome to Infinite Animes. Tap the button below to start watching.`,
+        reply_markup: app ? { inline_keyboard: [[{ text: '▶️ Watch Anime', web_app: { url: app } }]] } : undefined,
       });
     }
   }
@@ -515,7 +521,7 @@ function createHandler(db) {
 
       if (p.startsWith('/p/')) {
         const tok = tokens.get(p.slice(3));
-        if (!tok || Date.now() > tok.exp) return send(req, res, 410, '<!doctype html><body style="background:#000;color:#aaa;font:14px sans-serif;display:grid;place-items:center;height:100vh;margin:0">Link expire ho gaya. Wapas jaake dobara play dabao.</body>', { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' });
+        if (!tok || Date.now() > tok.exp) return send(req, res, 410, '<!doctype html><body style="background:#000;color:#aaa;font:14px sans-serif;display:grid;place-items:center;height:100vh;margin:0">This link has expired. Go back and tap play again.</body>', { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' });
         const o = Math.max(0, Math.min(tok.src.length - 1, +url.searchParams.get('o') || 0));
         return send(req, res, 200, playerHtml(tok.src[o]), {
           'content-type': 'text/html; charset=utf-8',
@@ -623,7 +629,7 @@ async function setupBot() {
   });
   log('setWebhook:', r && r.ok ? 'ok' : JSON.stringify(r));
   const app = CFG.miniAppUrl || CFG.publicUrl;
-  const m = await tg(CFG.botToken, 'setChatMenuButton', { menu_button: { type: 'web_app', text: 'Anime', web_app: { url: app } } });
+  const m = await tg(CFG.botToken, 'setChatMenuButton', { menu_button: { type: 'web_app', text: 'Watch', web_app: { url: app } } });
   log('menu button:', m && m.ok ? 'ok' : JSON.stringify(m));
 }
 
