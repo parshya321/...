@@ -551,7 +551,10 @@ function createHandler(db) {
         const tok = tokens.get(p.slice(3));
         if (!tok || Date.now() > tok.exp) return send(req, res, 410, '<!doctype html><body style="background:#000;color:#aaa;font:14px sans-serif;display:grid;place-items:center;height:100vh;margin:0">This link has expired. Go back and tap play again.</body>', { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' });
         const o = Math.max(0, Math.min(tok.src.length - 1, +url.searchParams.get('o') || 0));
+        let early = {};
+        try { early = { link: `<${new URL(tok.src[o]).origin}>; rel=preconnect` }; } catch (e) { /* bad url: skip */ }
         return send(req, res, 200, playerHtml(tok.src[o]), {
+          ...early,
           'content-type': 'text/html; charset=utf-8',
           'cache-control': 'no-store',
           'content-security-policy': "frame-ancestors 'self' https://web.telegram.org https://*.telegram.org",
