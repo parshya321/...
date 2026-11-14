@@ -36,6 +36,8 @@ const CFG = {
   tokenTtl: +env.PLAY_TOKEN_SECONDS || 300,
   refreshSec: +env.REFRESH_SECONDS || 120,
   pageSize: 30,
+  mangaBase: (env.MANGA_BASE || 'https://mangapark.cc').replace(/\/+$/, ''),
+  mangaRefreshSec: +env.MANGA_REFRESH_SECONDS || 600,
   lim: {
     apiPerMin: +env.LIMIT_API_PER_MIN || 120,
     playPer5Min: +env.LIMIT_PLAY_PER_5MIN || 30,
@@ -43,6 +45,8 @@ const CFG = {
     ipPerMin: +env.LIMIT_IP_PER_MIN || 240,
     banPlayAttempts5Min: +env.BAN_PLAY_ATTEMPTS_5MIN || 80,
     banBlockedPerMin: +env.BAN_BLOCKED_PER_MIN || 300,
+    readPer5Min: +env.LIMIT_READ_PER_5MIN || 60,
+    readPerDay: +env.LIMIT_READ_PER_DAY || 1500,
   },
 };
 CFG.webhookSecret = CFG.botToken ? crypto.createHash('sha256').update('wh:' + CFG.botToken).digest('hex').slice(0, 32) : '';
@@ -103,6 +107,7 @@ class Window {
 const W = {
   api: new Window(60e3), ip: new Window(60e3), blocked: new Window(60e3),
   play5: new Window(5 * 60e3), playAttempt5: new Window(5 * 60e3), playDay: new Window(24 * 3600e3),
+  read5: new Window(5 * 60e3), readDay: new Window(24 * 3600e3),
 };
 
 /* ------------------------------------------------------------------ */
@@ -119,7 +124,11 @@ const squash = (s) => s.replace(/\s+/g, '');
 /* ------------------------------------------------------------------ */
 const store = {
   list: [], byKey: new Map(), home: null, homeGz: null, homeEtag: '', meta: null, loadedAt: 0, version: '',
+  popular: [], // plays ke hisaab se: ['series:slug', ...] (pichhle 7 din, alag users)
 };
+// "anime" = Japanese audio wala title (cartoon / western animation nahi)
+const isAnime = (t) => (t.languages || []).some((l) => String(l).toLowerCase() === 'japanese');
+const NOT_A_GENRE = /^(animation|anime)$/i; // har title animated hai, iska row bekaar
 
 function isAdult(doc) {
   if (doc.adult === true) return true;
@@ -159,13 +168,20 @@ function buildStore(docs) {
     for (const t of safe) for (const g of t[field]) m.set(g, (m.get(g) || 0) + 1);
     return [...m.entries()].sort((a, b) => b[1] - a[1]).map(([name, n]) => ({ name, n }));
   };
-  const genres = count('genres');
+  const genres = count('genres').filter((g) => !NOT_A_GENRE.test(g.name));
   const languages = count('languages');
   const rows = genres.slice(0, 8).map((g) => ({
     title: g.name, genre: g.name,
     items: safe.filter((t) => t.genres.includes(g.name)).slice(0, 15).map(card),
   }));
+  const anime = safe.filter(isAnime);
+  const popular = [];
+  for (const k of store.popular || []) { const t = byKey.get(k); if (t && !t.adult && isAnime(t)) popular.push(t); if (popular.length >= 20) break; }
+  for (const t of anime) { if (popular.length >= 12) break; if (t.type === 'series' && !popular.includes(t)) popular.push(t); }
   const home = {
+    hero: popular.slice(0, 5).map((t) => Object.assign(card(t), { backdrop: t.backdrop || null, genres: t.genres.slice(0, 3) })),
+    popular: popular.slice(0, 20).map(card),
+    latestAnime: anime.slice(0, 20).map(card),
     latest: safe.slice(0, 20).map(card),
     series: safe.filter((t) => t.type === 'series').slice(0, 20).map(card),
     movies: safe.filter((t) => t.type === 'movie').slice(0, 20).map(card),
@@ -395,6 +411,209 @@ function serveStatic(req, res, pathname) {
 /* ------------------------------------------------------------------ */
 /* Routes                                                              */
 /* ------------------------------------------------------------------ */
+/* ------------------------------------------------------------------ */
+/* MANGA: catalog (memory), chapter pages (site se, jab user khole)    */
+/* Anime se bilkul alag: alag store, alag search, alag routes          */
+/* ------------------------------------------------------------------ */
+const mstore = { list: [], bySlug: new Map(), home: null, genres: [], types: [], popular: [], loadedAt: 0 };
+
+function mcard(m) {
+  return { slug: m.slug, title: m.title, cover: m.cover || null, type: m.type || null, latest: m.latest != null ? m.latest : null };
+}
+
+function buildManga(docs) {
+  const list = [], bySlug = new Map();
+  for (const d of docs) {
+    if (!d.title) continue;
+    const m = {
+      slug: d._id, title: d.title, cover: d.cover || null, genres: d.genres || [], type: d.type || null, status: d.status || null,
+      year: d.year || null, authors: d.authors || [], chapters: d.chapterCount || 0, latest: d.latestNum != null ? d.latestNum : null,
+      adult: !!d.adult, doujinshi: !!d.doujinshi,
+      updated: d.updatedAt ? +new Date(d.updatedAt) : d.firstSeen ? +new Date(d.firstSeen) : 0,
+    };
+    m.n = norm(m.title); m.ns = squash(m.n);
+    list.push(m); bySlug.set(m.slug, m);
+  }
+  list.sort((a, b) => b.updated - a.updated || a.title.localeCompare(b.title));
+  const safe = list.filter((m) => !m.adult);
+  const cnt = (f) => {
+    const c = new Map();
+    for (const m of safe) for (const g of [].concat(m[f] || [])) if (g) c.set(g, (c.get(g) || 0) + 1);
+    return [...c].sort((a, b) => b[1] - a[1]).map(([name, n]) => ({ name, n }));
+  };
+  const genres = cnt('genres').filter((g) => g.name.toLowerCase() !== 'doujinshi');
+  const types = cnt('type');
+  const pop = [];
+  for (const s of mstore.popular) { const m = bySlug.get(s); if (m && !m.adult) pop.push(m); if (pop.length >= 20) break; }
+  for (const m of safe) { if (pop.length >= 12) break; if (!pop.includes(m) && m.chapters >= 20 && !m.doujinshi) pop.push(m); }
+  const home = {
+    popular: pop.map(mcard),
+    latest: safe.filter((m) => !m.doujinshi).slice(0, 24).map(mcard),
+    rows: types.slice(0, 3).map((t) => ({ title: t.name, type: t.name, items: safe.filter((m) => m.type === t.name && !m.doujinshi).slice(0, 15).map(mcard) })),
+    genres: genres.slice(0, 40), types,
+    total: safe.length,
+  };
+  return { list, bySlug, home, genres, types, loadedAt: Date.now() };
+}
+
+async function refreshManga(db) {
+  const docs = await db.collection('manga').find({ live: true }, {
+    projection: { title: 1, cover: 1, genres: 1, type: 1, status: 1, year: 1, authors: 1, chapterCount: 1, latestNum: 1, adult: 1, doujinshi: 1, updatedAt: 1, firstSeen: 1 },
+  }).toArray();
+  if (!docs.length && mstore.list.length) return;
+  Object.assign(mstore, buildManga(docs));
+  log(`manga catalog: ${mstore.list.length} titles`);
+}
+
+function mangaSearch(q, { includeAdult, page }) {
+  const nq = norm(q);
+  if (!nq) return { items: [], total: 0 };
+  const words = nq.split(' '), sq = squash(nq), hits = [];
+  for (const m of mstore.list) {
+    if (m.adult && !includeAdult) continue;
+    let s = 0;
+    if (m.n === nq) s = 100;
+    else if (m.n.startsWith(nq)) s = 80;
+    else if ((' ' + m.n).includes(' ' + nq)) s = 65;
+    else if (m.n.includes(nq)) s = 50;
+    else if (words.every((w) => m.n.includes(w))) s = 40;
+    else if (sq.length >= 3 && m.ns.includes(sq)) s = 30;
+    if (s) hits.push([s - (m.doujinshi ? 5 : 0), m]);
+  }
+  hits.sort((a, b) => b[0] - a[0] || b[1].chapters - a[1].chapters);
+  const p = Math.max(1, page || 1);
+  return { total: hits.length, items: hits.slice((p - 1) * CFG.pageSize, p * CFG.pageSize).map((h) => mcard(h[1])), more: hits.length > p * CFG.pageSize };
+}
+
+function mangaList({ genre, type, status, sort, page }) {
+  let arr = mstore.list.filter((m) => !m.adult);
+  if (genre) { const g = genre.toLowerCase(); arr = arr.filter((m) => m.genres.some((x) => x.toLowerCase() === g)); }
+  else arr = arr.filter((m) => !m.doujinshi);
+  if (type) arr = arr.filter((m) => (m.type || '').toLowerCase() === type.toLowerCase());
+  if (status) arr = arr.filter((m) => (m.status || '').toLowerCase() === status.toLowerCase());
+  if (sort === 'az') arr = [...arr].sort((a, b) => a.title.localeCompare(b.title));
+  else if (sort === 'chapters') arr = [...arr].sort((a, b) => b.chapters - a.chapters);
+  else if (sort === 'year') arr = [...arr].sort((a, b) => (+b.year || 0) - (+a.year || 0));
+  const p = Math.max(1, page || 1);
+  return { total: arr.length, items: arr.slice((p - 1) * CFG.pageSize, p * CFG.pageSize).map(mcard), more: arr.length > p * CFG.pageSize };
+}
+
+// chapter ki photos: site se laao (yahan save nahi hoti), thodi der memory mein rakho
+const pageCache = new Map(); // `${slug}|${key}` -> { at, pages }
+const PAGE_TTL = 6 * 3600e3;
+const imgHosts = new Set();
+const UA = 'Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Mobile Safari/537.36';
+
+function parsePages(html) {
+  const out = [], seen = new Set();
+  const add = (u) => {
+    if (!u) return;
+    u = u.replace(/&amp;/g, '&').trim();
+    if (!/^https?:\/\//i.test(u)) return;
+    if (/\/cover\/|[-_/]cover[-_.]|logo|banner|avatar|icon|emoji|placeholder|loading|\/static\/|\?v=/i.test(u)) return;
+    if (!/\.(png|jpe?g|webp|gif|avif)(\?|$)/i.test(u)) return;
+    if (seen.has(u)) return;
+    seen.add(u); out.push(u);
+  };
+  const tags = html.match(/<img\b[^>]*>/gi) || [];
+  for (const t of tags) {
+    const a = (n) => { const m = new RegExp('\\s' + n + '\\s*=\\s*["\']([^"\']+)["\']', 'i').exec(t); return m ? m[1] : ''; };
+    add(a('data-src') || a('data-original') || a('data-lazy-src') || a('src'));
+  }
+  if (!out.length) { // img tags nahi mile: poore page mein image links dhundo
+    for (const m of html.matchAll(/https?:\/\/[^"'\s<>\\]+?\.(?:png|jpe?g|webp|gif|avif)(?:\?[^"'\s<>\\]*)?/gi)) add(m[0]);
+  }
+  return out;
+}
+
+async function chapterPages(slug, key) {
+  const k = `${slug}|${key}`;
+  const c = pageCache.get(k);
+  if (c && Date.now() - c.at < PAGE_TTL) return c.pages;
+  const url = `${CFG.mangaBase}/read/${encodeURIComponent(slug)}/en/${encodeURIComponent(key)}`;
+  let html = '';
+  for (let i = 0; i < 2; i++) {
+    const ac = new AbortController(); const tm = setTimeout(() => ac.abort(), 20000);
+    try {
+      const r = await fetch(url, { headers: { 'user-agent': UA, 'accept-language': 'en-US,en;q=0.9' }, signal: ac.signal });
+      if (r.status === 404) throw Object.assign(new Error('not_found'), { code: 'not_found' });
+      if (!r.ok) throw new Error('http_' + r.status);
+      html = await r.text();
+      break;
+    } catch (e) { if (e.code === 'not_found' || i === 1) throw e; } finally { clearTimeout(tm); }
+  }
+  const pages = parsePages(html);
+  if (!pages.length) throw Object.assign(new Error('no_pages'), { code: 'no_pages' });
+  for (const u of pages) { try { imgHosts.add(new URL(u).host); } catch (e) { /* skip */ } }
+  if (pageCache.size > 3000) pageCache.delete(pageCache.keys().next().value);
+  pageCache.set(k, { at: Date.now(), pages });
+  return pages;
+}
+
+// photo seedha na khule to hamare server se (backup). Link signed hai, koi aur use nahi kar sakta.
+const imgSecret = crypto.createHash('sha256').update('img:' + (CFG.botToken || 'x')).digest();
+const b64u = (s) => Buffer.from(s).toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+function proxyUrl(u) {
+  const sig = crypto.createHmac('sha256', imgSecret).update(u).digest('hex').slice(0, 20);
+  return `/mi/${sig}/${b64u(u)}`;
+}
+async function serveImage(req, res, sig, b64) {
+  let u;
+  try { u = Buffer.from(b64.replace(/-/g, '+').replace(/_/g, '/'), 'base64').toString('utf8'); } catch (e) { return fail(req, res, 400, 'bad_request'); }
+  const want = crypto.createHmac('sha256', imgSecret).update(u).digest('hex').slice(0, 20);
+  if (sig.length !== want.length || !crypto.timingSafeEqual(Buffer.from(sig), Buffer.from(want))) return fail(req, res, 403, 'no');
+  let host; try { host = new URL(u).host; } catch (e) { return fail(req, res, 400, 'bad_request'); }
+  if (!imgHosts.has(host)) return fail(req, res, 403, 'no');
+  const ac = new AbortController(); const tm = setTimeout(() => ac.abort(), 30000);
+  try {
+    const r = await fetch(u, { headers: { 'user-agent': UA, referer: CFG.mangaBase + '/', accept: 'image/avif,image/webp,image/*,*/*' }, signal: ac.signal });
+    const type = r.headers.get('content-type') || '';
+    if (!r.ok || !/^image\//i.test(type)) { clearTimeout(tm); return fail(req, res, 502, 'image_failed'); }
+    const len = +r.headers.get('content-length') || 0;
+    if (len > 25e6) { clearTimeout(tm); return fail(req, res, 413, 'too_big'); }
+    const buf = Buffer.from(await r.arrayBuffer());
+    clearTimeout(tm);
+    res.writeHead(200, Object.assign({}, SEC_HEADERS, { 'content-type': type, 'content-length': buf.length, 'cache-control': 'public, max-age=86400, immutable' }));
+    return res.end(buf);
+  } catch (e) { clearTimeout(tm); return fail(req, res, 502, 'image_failed'); }
+}
+
+const chapCache = new Map(); // slug -> { at, items }
+async function mangaChapters(db, slug) {
+  const c = chapCache.get(slug);
+  if (c && Date.now() - c.at < 120e3) return c.items;
+  const rows = await db.collection('manga_chapters').find({ slug }, { projection: { _id: 0, key: 1, num: 1, title: 1 } }).toArray();
+  rows.sort((a, b) => (b.num == null ? -1 : b.num) - (a.num == null ? -1 : a.num) || String(b.key).localeCompare(String(a.key)));
+  const items = rows.map((r) => {
+    const t = String(r.title || '');
+    const dm = /([A-Z][a-z]{2,8}\.? \d{1,2}, \d{4})\s*$/.exec(t);
+    let label = (dm ? t.slice(0, dm.index) : t).trim();
+    if (!label || /^chapter\s*$/i.test(label)) label = r.num != null ? `Chapter ${r.num}` : 'Oneshot';
+    return { key: r.key, num: r.num, label, date: dm ? dm[1] : null };
+  });
+  if (chapCache.size > 1000) chapCache.clear();
+  chapCache.set(slug, { at: Date.now(), items });
+  return items;
+}
+
+async function refreshPopular(db) {
+  const since = new Date(Date.now() - 7 * 86400e3);
+  const [a, m] = await Promise.all([
+    db.collection('plays').aggregate([
+      { $match: { ts: { $gte: since } } },
+      { $group: { _id: { t: '$type', s: '$slug' }, users: { $addToSet: '$user' } } },
+      { $project: { n: { $size: '$users' } } }, { $sort: { n: -1 } }, { $limit: 60 },
+    ]).toArray(),
+    db.collection('manga_reads').aggregate([
+      { $match: { ts: { $gte: since } } },
+      { $group: { _id: '$slug', users: { $addToSet: '$user' } } },
+      { $project: { n: { $size: '$users' } } }, { $sort: { n: -1 } }, { $limit: 60 },
+    ]).toArray(),
+  ]);
+  store.popular = a.map((x) => `${x._id.t}:${x._id.s}`);
+  mstore.popular = m.map((x) => x._id);
+}
+
 function createHandler(db) {
   async function authed(req, res) {
     const h = String(req.headers.authorization || '');
@@ -542,6 +761,10 @@ function createHandler(db) {
     try {
       if (p === '/health') return json(req, res, 200, { ok: true, titles: store.list.length, loaded: new Date(store.loadedAt).toISOString() });
 
+      // manga photo backup (signed link): ek chapter mein 50+ photos, isliye IP limit se pehle
+      const mi = p.match(/^\/mi\/([0-9a-f]{20})\/([A-Za-z0-9_-]{8,3000})$/);
+      if (mi && (req.method === 'GET' || req.method === 'HEAD')) return await serveImage(req, res, mi[1], mi[2]);
+
       const ip = clientIp(req);
       if (W.ip.hit(ip).count > CFG.lim.ipPerMin) return fail(req, res, 429, 'slow_down');
 
@@ -630,6 +853,58 @@ function createHandler(db) {
       }
 
       if (p === '/api/play' && req.method === 'POST') return await play(req, res, ctx);
+
+      /* ---------- MANGA (anime se alag) ---------- */
+      if (p === '/api/manga/home' && req.method === 'GET') {
+        if (!mstore.home) return json(req, res, 200, { popular: [], latest: [], rows: [], genres: [], types: [], total: 0 });
+        return json(req, res, 200, mstore.home, 60);
+      }
+      if (p === '/api/manga/list' && req.method === 'GET') {
+        return json(req, res, 200, mangaList({
+          genre: (q.get('genre') || '').slice(0, 60), type: (q.get('type') || '').slice(0, 20), status: (q.get('status') || '').slice(0, 20),
+          sort: q.get('sort'), page: +q.get('page') || 1,
+        }), 60);
+      }
+      if (p === '/api/manga/search' && req.method === 'GET') {
+        return json(req, res, 200, mangaSearch((q.get('q') || '').slice(0, 80), { includeAdult: ctx.u.age !== 'minor', page: +q.get('page') || 1 }), 30);
+      }
+      m = p.match(/^\/api\/manga\/title\/([^/]{1,200})$/);
+      if (m && req.method === 'GET') {
+        const mg = mstore.bySlug.get(decodeURIComponent(m[1]));
+        if (!mg) return fail(req, res, 404, 'not_found');
+        if (!ageGate(req, res, mg, ctx)) return;
+        const [doc, chapters] = await Promise.all([
+          db.collection('manga').findOne({ _id: mg.slug }, { projection: { description: 1 } }),
+          mangaChapters(db, mg.slug),
+        ]);
+        return json(req, res, 200, {
+          slug: mg.slug, title: mg.title, cover: mg.cover, type: mg.type, status: mg.status, year: mg.year,
+          authors: mg.authors, genres: mg.genres, adult: mg.adult, description: (doc && doc.description) || '', chapters,
+        }, 120);
+      }
+      if (p === '/api/manga/read' && req.method === 'POST') {
+        const body = await readJson(req);
+        const slug = typeof body.slug === 'string' ? body.slug.slice(0, 200) : '';
+        const key = typeof body.key === 'string' ? body.key.slice(0, 120) : '';
+        const mg = mstore.bySlug.get(slug);
+        if (!mg || !key) return fail(req, res, 404, 'not_found');
+        if (!ageGate(req, res, mg, ctx)) return;
+        if (W.read5.peek(ctx.id) >= CFG.lim.readPer5Min) return fail(req, res, 429, 'slow_down', { retry: 60 });
+        if (W.readDay.peek(ctx.id) >= CFG.lim.readPerDay) return fail(req, res, 429, 'daily_limit');
+        const ch = await db.collection('manga_chapters').findOne({ _id: `${slug}|${key}` }, { projection: { num: 1 } });
+        if (!ch) return fail(req, res, 404, 'not_found');
+        let pages;
+        try { pages = await chapterPages(slug, key); } catch (e) {
+          log('manga pages fail', slug, key, e.message);
+          return fail(req, res, e.code === 'not_found' ? 404 : 502, e.code === 'no_pages' || e.code === 'not_found' ? 'no_pages' : 'source_down');
+        }
+        W.read5.hit(ctx.id); W.readDay.hit(ctx.id);
+        const label = ch.num != null ? `Ch ${ch.num}` : 'Oneshot';
+        const was = watching.get(ctx.id), wkey = `manga:${slug}|${key}`;
+        watching.set(ctx.id, { user: ctx.user, title: '📖 ' + mg.title, label, key: wkey, since: was && was.key === wkey ? was.since : Date.now(), at: Date.now() });
+        db.collection('manga_reads').insertOne({ ts: new Date(), user: ctx.id, slug, key, title: mg.title, label }).catch(() => {});
+        return json(req, res, 200, { slug, key, label, pages: pages.map((u) => ({ u, b: proxyUrl(u) })) });
+      }
 
       // player khula hai: har ~45 second "abhi dekh raha hai" update
       if (p === '/api/ping' && req.method === 'POST') {
@@ -784,7 +1059,10 @@ async function main() {
   const db = client.db(CFG.dbName);
   log('MongoDB connected');
   await refresh(db);
+  try { await refreshManga(db); } catch (e) { log('manga refresh error', e.message); }
+  try { await refreshPopular(db); await refresh(db); await refreshManga(db); } catch (e) { log('popular error', e.message); }
   await Promise.all([
+    db.collection('manga_reads').createIndex({ ts: 1 }, { expireAfterSeconds: 30 * 86400 }),
     db.collection('plays').createIndex({ ts: 1 }, { expireAfterSeconds: 30 * 86400 }),
     db.collection('plays').createIndex({ user: 1, ts: -1 }),
     db.collection('bot_users').createIndex({ last_start: -1 }),
@@ -795,10 +1073,13 @@ async function main() {
   bans.forEach((b) => banned.add(String(b._id)));
 
   setInterval(() => refresh(db).catch((e) => log('refresh error', e.message)), CFG.refreshSec * 1000);
+  setInterval(() => refreshManga(db).catch((e) => log('manga refresh error', e.message)), CFG.mangaRefreshSec * 1000);
+  setInterval(() => refreshPopular(db).catch((e) => log('popular error', e.message)), 15 * 60e3);
   setInterval(() => {
     Object.values(W).forEach((w) => w.sweep());
     const now = Date.now();
     for (const [k, v] of tokens) if (now > v.exp) tokens.delete(k);
+    for (const [k, v] of pageCache) if (now - v.at > PAGE_TTL) pageCache.delete(k);
     for (const [k, v] of watching) if (now - v.at > 30 * 60e3) watching.delete(k);
     if (users.size > 50000) users.clear();
   }, 60e3);
@@ -818,9 +1099,9 @@ async function main() {
   setupBot().catch((e) => log('bot setup error', e.message));
 }
 
-module.exports = { adminText, watching, todayStart, checkInitData, buildStore, search, listTitles, serverOptions, playerHtml, createHandler, store, CFG, W, banned, users, tokens, norm, isAdult };
+module.exports = { parsePages, buildManga, mangaSearch, mangaList, mstore, proxyUrl, adminText, watching, todayStart, checkInitData, buildStore, search, listTitles, serverOptions, playerHtml, createHandler, store, CFG, W, banned, users, tokens, norm, isAdult };
 
 if (require.main === module) {
   process.on('unhandledRejection', (e) => log('unhandledRejection', e && e.message));
   main().catch((e) => { console.error(e); process.exit(1); });
-} 
+}
