@@ -97,7 +97,7 @@ button:focus-visible,input:focus-visible{outline:2px solid #fff;outline-offset:2
 .sbox svg{width:20px;height:20px;flex:none}
 
 /* title page */
-.tpage{position:relative}
+.tpage{position:relative;overflow-x:hidden}
 .tbg{position:absolute;top:0;left:0;right:0;height:380px;background:center 30%/cover no-repeat;opacity:.35;filter:blur(14px);transform:scale(1.1)}
 .tbg::after{content:"";position:absolute;inset:0;background:linear-gradient(180deg,rgba(0,0,0,.2),#000 95%)}
 .tposter{position:relative;width:170px;margin:28px auto 0;box-shadow:0 16px 40px rgba(0,0,0,.7)}
@@ -231,6 +231,66 @@ body.lock{overflow:hidden}
 #intro .foot{position:absolute;bottom:-7%;width:27%;height:15%;border-radius:50% 50% 42% 42%;background:#9d9d9d;will-change:transform}
 #intro .foot.l{left:16%}#intro .foot.r{right:16%}
 @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+
+/* ===== Anime | Manga switch ===== */
+.seg{display:grid;grid-template-columns:1fr 1fr;margin:6px var(--pad) 2px;background:var(--panel);border:1px solid var(--line);border-radius:999px;padding:4px}
+.seg button{height:38px;border-radius:999px;font-size:15px;font-weight:700;color:var(--dim)}
+.seg button.on{background:#fff;color:#000}
+.spill{display:flex;align-items:center;gap:10px;margin:10px var(--pad) 0;height:46px;width:calc(100% - 2*var(--pad));border-radius:999px;background:var(--panel);border:1px solid var(--line);padding:0 18px;color:var(--dim);font-size:15px;text-align:left}
+.spill svg{width:18px;height:18px}
+
+/* ===== Manga page ===== */
+.mmeta{position:relative;text-align:center;color:var(--dim);font-size:14px;margin:-6px var(--pad) 12px}
+.mtags{position:relative;display:flex;flex-wrap:wrap;justify-content:center;gap:6px;margin:0 var(--pad) 16px}
+.mtags span{border:1px solid #444;border-radius:999px;padding:3px 11px;font-size:12px;font-weight:600}
+.chhead{display:flex;align-items:center;gap:10px;padding:24px var(--pad) 10px}
+.chhead h2{margin:0;font-size:20px;font-weight:800}
+.chhead .bar{width:4px;height:22px;border-radius:4px;background:#fff}
+.chhead button{margin-left:auto;color:var(--dim);font-size:14px;font-weight:600;padding:6px 0 6px 10px}
+.chfind{margin:0 var(--pad) 8px;display:flex;align-items:center;height:42px;border:1px solid var(--line);border-radius:999px;padding:0 16px;background:var(--panel)}
+.chfind input{flex:1;min-width:0;background:none;border:0;outline:0;color:#fff;font:500 15px var(--font)}
+.chlist{padding:0 var(--pad)}
+.chrow{display:flex;align-items:center;justify-content:space-between;gap:12px;width:100%;min-height:52px;border-bottom:1px solid #1d1d1d;text-align:left;font-size:15px}
+.chrow small{color:var(--dim);font-size:12px;white-space:nowrap}
+.chrow.read{color:#8a8a8a}
+.chrow.now{font-weight:800;color:#fff}
+.chrow.now small::before{content:"Reading · ";color:#fff}
+.chmore{display:block;margin:14px auto 0}
+
+/* ===== Reader ===== */
+body.reading{overflow:hidden}
+.reader{position:fixed;inset:0;z-index:50;background:#000;color:#fff}
+.rs{position:absolute;inset:0;overflow:auto;-webkit-overflow-scrolling:touch;touch-action:pan-x pan-y;overscroll-behavior:contain;scrollbar-width:none}
+.rs::-webkit-scrollbar{display:none}
+.rz{margin:0 auto;width:min(100%,900px);padding:calc(56px + env(safe-area-inset-top)) 0 calc(96px + env(safe-area-inset-bottom))}
+.rpg{position:relative;min-height:70vh;background:#0b0b0b;display:flex;align-items:center;justify-content:center}
+.rpg.ok{min-height:0;background:none}
+.rpg img{display:block;width:100%;height:auto;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none}
+.rpg .pn{position:absolute;color:#555;font-size:14px;font-weight:700}
+.rpg.ok .pn{display:none}
+.rpg .rt{position:absolute;padding:10px 18px;border-radius:999px;background:#fff;color:#000;font-weight:700;font-size:14px}
+.rend{padding:40px var(--pad) 24px;text-align:center}
+.rend h3{margin:0 0 4px;font-size:18px}
+.rend p{margin:0 0 18px;color:var(--dim);font-size:14px}
+.rend .btn{width:100%;max-width:340px;margin:0 auto 10px;display:flex}
+.rbar{position:absolute;left:0;right:0;z-index:2;background:rgba(0,0,0,.9);transition:transform .2s,opacity .2s}
+.rtop{top:0;display:flex;align-items:center;gap:12px;padding:calc(8px + env(safe-area-inset-top)) 12px 8px}
+.rtop .x{width:40px;height:40px;border-radius:999px;display:grid;place-items:center;flex:none}
+.rtop .x svg{width:20px;height:20px}
+.rtop .tt{flex:1;min-width:0}
+.rtop .tt b{display:block;font-size:15px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.rtop .tt small{color:var(--dim);font-size:12px}
+.rtop .zr{height:32px;padding:0 12px;border-radius:999px;border:1px solid #444;font-size:13px;font-weight:700}
+.rbot{bottom:0;display:grid;grid-template-columns:1fr auto 1fr;gap:10px;align-items:center;padding:10px 12px calc(10px + env(safe-area-inset-bottom))}
+.rbot .btn{height:40px}
+.rbot .pc{color:var(--dim);font-size:13px;font-weight:600;min-width:64px;text-align:center}
+.rprog{position:absolute;left:0;right:0;top:0;height:3px;background:#222}
+.rprog i{display:block;height:3px;background:#fff;width:0}
+.reader.bare .rtop{transform:translateY(-100%);opacity:0}
+.reader.bare .rbot{transform:translateY(100%);opacity:0}
+.rload{position:absolute;inset:0;display:grid;place-items:center;color:var(--dim);font-size:14px}
+.zhint{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);background:rgba(0,0,0,.8);border-radius:12px;padding:8px 14px;font-weight:700;font-size:14px;pointer-events:none;opacity:0;transition:opacity .2s;z-index:3}
+.zhint.on{opacity:1}
 </style>
 </head>
 <body>
@@ -567,35 +627,38 @@ body.lock{overflow:hidden}
     var id = ++renderId;
     var alive = function () { return id === renderId; };
     setTab(r.tab);
+    closeReader();
     app.innerHTML = '';
-    ({ home: vHome, list: vList, search: vSearch, title: vTitle, play: vPlay })[r.name](r, alive);
+    ({ home: vHome, list: vList, search: vSearch, title: vTitle, play: vPlay,
+      mhome: mHome, mlist: mList, msearch: mSearch, mtitle: mTitle, mread: mRead, mlib: mLib })[r.name](r, alive);
     window.scrollTo(0, y || 0);
   }
 
   /* ---------- HOME ---------- */
   function vHome(r, alive) {
-    app.innerHTML = LOGO + '<div class="hero sk"></div>' + heading('Latest') + '<div class="grid">' + skel(6) + '</div>';
+    app.innerHTML = LOGO + SEG() + '<div class="hero sk"></div>' + heading('Latest') + '<div class="grid">' + skel(6) + '</div>';
     api('/api/home').then(function (h) {
       if (!alive()) return;
-      var top = h.latest && h.latest[0], cw = hist();
-      var html = LOGO;
+      var top = (h.hero && h.hero[0]) || (h.latest && h.latest[0]), cw = hist();
+      var html = LOGO + SEG();
       if (h.languages && h.languages.length) {
         html += '<div class="langs">' + h.languages.slice(0, 8).map(function (l) {
           return '<button class="lang" data-lang="' + esc(l.name) + '"><b>' + esc(l.name) + '</b><small>' + esc(LANG_NATIVE[l.name] || l.n + ' titles') + '</small></button>';
         }).join('') + '</div>';
       }
       if (top) {
-        html += '<div class="hero"><div class="bg" style="background-image:url(\'' + esc(top.poster || '') + '\')"></div><div class="in"><div class="tag">Just added</div><h1>' +
+        html += '<div class="hero"><div class="bg" style="background-image:url(\'' + esc(top.poster || '') + '\')"></div><div class="in"><div class="tag">' + (h.hero && h.hero.length ? 'Popular anime' + (top.genres && top.genres.length ? ' · ' + esc(top.genres.slice(0, 2).join(', ')) : '') : 'Just added') + '</div><h1>' +
           esc(top.title) + '</h1><button class="btn white" data-open="' + esc(top.type) + '|' + esc(top.slug) + '">' + ICON.play + 'Watch now</button></div></div>';
       }
       if (cw.length) html += heading('Continue watching') + '<div class="strip">' + cw.map(function (c) { return card(c, c.label); }).join('') + '</div>';
-      html += heading('Latest', 'all|') + '<div class="grid">' + (h.latest || []).slice(1, 13).map(function (c) { return card(c); }).join('') + '</div>';
+      if ((h.popular || []).length > 1) html += heading('Popular anime') + '<div class="strip">' + h.popular.slice(1).map(function (c) { return card(c); }).join('') + '</div>';
+      html += heading('Latest', 'all|') + '<div class="grid">' + (h.latest || []).slice(0, 12).map(function (c) { return card(c); }).join('') + '</div>';
       html += heading('Series', 'series|') + '<div class="strip">' + (h.series || []).map(function (c) { return card(c); }).join('') + '</div>';
       html += heading('Movies', 'movie|') + '<div class="strip">' + (h.movies || []).map(function (c) { return card(c); }).join('') + '</div>';
       (h.rows || []).forEach(function (row) { html += heading(row.title, 'genre|' + row.genre) + '<div class="strip">' + row.items.map(function (c) { return card(c); }).join('') + '</div>'; });
       if (h.genres && h.genres.length) html += heading('All genres') + '<div class="chips wrap">' + h.genres.map(function (g) { return '<button class="chip" data-genre="' + esc(g.name) + '">' + esc(g.name) + '<small>' + g.n + '</small></button>'; }).join('') + '</div>';
       app.innerHTML = html;
-    }).catch(function (e) { if (alive()) app.innerHTML = LOGO + empty('Could not load', errMsg(e), e.code !== 'telegram_only' && e.code !== 'banned'); });
+    }).catch(function (e) { if (alive()) app.innerHTML = LOGO + SEG() + empty('Could not load', errMsg(e), e.code !== 'telegram_only' && e.code !== 'banned'); });
   }
 
   /* ---------- LIST ---------- */
@@ -873,10 +936,381 @@ body.lock{overflow:hidden}
     });
   }
 
+  /* =================================================================== */
+  /* MANGA (anime se alag: apna home, search, list, page, reader)         */
+  /* =================================================================== */
+  ICON.book = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5a2 2 0 0 1 2-2h13v16H6a2 2 0 0 0-2 2z"/><path d="M4 21V5"/></svg>';
+  ICON.browse = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h10"/></svg>';
+  ICON.lib = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="3" width="5" height="18" rx="1"/><rect x="11" y="3" width="5" height="18" rx="1"/><path d="m18 4 3 16"/></svg>';
+  ICON.home = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10.5 12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></svg>';
+  ICON.tv = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="13" rx="2"/><path d="M8 21h8"/></svg>';
+  ICON.film = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M7 4v16M17 4v16M3 9h4M3 15h4M17 9h4M17 15h4"/></svg>';
+
+  var mode = ls('mode') === 'manga' ? 'manga' : 'anime';
+  var NAVS = {
+    anime: [['home', 'Home', 'home'], ['search', 'Search', 'search'], ['series', 'Series', 'tv'], ['movie', 'Movies', 'film']],
+    manga: [['mhome', 'Home', 'home'], ['msearch', 'Search', 'search'], ['mbrowse', 'Browse', 'browse'], ['mlib', 'Library', 'lib']],
+  };
+  function buildNav() {
+    nav.querySelector('.in').innerHTML = NAVS[mode].map(function (n) { return '<button data-tab="' + n[0] + '">' + ICON[n[2]] + n[1] + '</button>'; }).join('');
+  }
+  function SEG() { return '<div class="seg" role="tablist" aria-label="Section"><button role="tab" data-mode="anime" class="' + (mode === 'anime' ? 'on' : '') + '">Anime</button><button role="tab" data-mode="manga" class="' + (mode === 'manga' ? 'on' : '') + '">Manga</button></div>'; }
+  function setMode(m) {
+    if (m === mode) return;
+    mode = m; ls('mode', m); buildNav();
+    go(m === 'manga' ? { name: 'mhome', tab: 'mhome' } : { name: 'home', tab: 'home' }, { root: true });
+  }
+
+  /* ---------- reading history (Continue reading) ---------- */
+  function rhist(item) {
+    var h = ls('cr') || [];
+    if (!item) return h;
+    h = h.filter(function (x) { return x.slug !== item.slug; });
+    h.unshift(item); ls('cr', h.slice(0, 30));
+  }
+  function rfind(slug) { return (ls('cr') || []).find(function (x) { return x.slug === slug; }); }
+
+  function mcardHtml(c, badge) {
+    var b = badge || (c.latest != null ? 'Ch ' + c.latest : '');
+    return '<button class="card" data-mopen="' + esc(c.slug) + '">' + poster(c.cover, c.title, b) + '<div class="t">' + esc(c.title) + '</div></button>';
+  }
+  function getManga(slug) { return api('/api/manga/title/' + encodeURIComponent(slug)); }
+
+  /* ---------- MANGA HOME ---------- */
+  function mHome(r, alive) {
+    var top = LOGO + SEG() + '<button class="spill" data-tab-go="msearch">' + ICON.search + 'Search manga</button>';
+    app.innerHTML = top + heading('New chapters') + '<div class="grid">' + skel(6) + '</div>';
+    api('/api/manga/home').then(function (h) {
+      if (!alive()) return;
+      var html = top, cr = rhist();
+      if (cr.length) html += heading('Continue reading', 'lib|') + '<div class="strip">' + cr.slice(0, 12).map(function (c) { return mcardHtml(c, c.label); }).join('') + '</div>';
+      if ((h.popular || []).length) html += heading('Popular') + '<div class="strip">' + h.popular.map(function (c) { return mcardHtml(c); }).join('') + '</div>';
+      if (!(h.latest || []).length) html += empty('Manga is on the way', 'The manga library is being prepared. Check back soon.');
+      else html += heading('New chapters', 'mall|') + '<div class="grid">' + h.latest.slice(0, 12).map(function (c) { return mcardHtml(c); }).join('') + '</div>';
+      (h.rows || []).forEach(function (row) { if (row.items.length) html += heading(row.title, 'mtype|' + row.type) + '<div class="strip">' + row.items.map(function (c) { return mcardHtml(c); }).join('') + '</div>'; });
+      if ((h.genres || []).length) html += heading('Genres') + '<div class="chips wrap">' + h.genres.map(function (g) { return '<button class="chip" data-mgenre="' + esc(g.name) + '">' + esc(g.name) + '</button>'; }).join('') + '</div>';
+      app.innerHTML = html;
+    }).catch(function (e) { if (alive()) app.innerHTML = top + empty('Could not load', errMsg(e), e.code !== 'telegram_only' && e.code !== 'banned'); });
+  }
+
+  /* ---------- MANGA LIST / BROWSE ---------- */
+  function mList(r, alive) {
+    var name = r.genre || r.mtype || 'Browse manga';
+    var types = ['', 'Manga', 'Manhwa', 'Manhua'];
+    app.innerHTML = '<div class="ph"><h1>' + esc(name) + '</h1><p id="cnt">&nbsp;</p></div>' +
+      (r.genre ? '' : '<div class="chips" id="mtypes" style="margin-bottom:8px">' + types.map(function (t) { return '<button class="chip' + ((r.mtype || '') === t ? ' on' : '') + '" data-mt="' + t + '">' + (t || 'All') + '</button>'; }).join('') + '</div>') +
+      '<div class="chips sorts" id="sorts">' + [['', 'Latest'], ['chapters', 'Most chapters'], ['az', 'A to Z'], ['year', 'Year']].map(function (s) { return '<button class="chip' + ((r.sort || '') === s[0] ? ' on' : '') + '" data-sort="' + s[0] + '">' + s[1] + '</button>'; }).join('') +
+      '</div><div class="grid" id="grid">' + skel(9) + '</div><div class="sentinel" id="sen"></div>';
+    var page = 0, busy = false, done = false, first = true, grid = document.getElementById('grid');
+    function load() {
+      if (busy || done) return; busy = true; page++;
+      var qs = 'page=' + page + (r.genre ? '&genre=' + encodeURIComponent(r.genre) : '') + (r.mtype ? '&type=' + encodeURIComponent(r.mtype) : '') + (r.sort ? '&sort=' + r.sort : '');
+      api('/api/manga/list?' + qs).then(function (d) {
+        if (!alive()) return;
+        if (first) { first = false; grid.innerHTML = ''; document.getElementById('cnt').textContent = d.total.toLocaleString('en-US') + ' titles'; if (!d.total) grid.outerHTML = empty('Nothing here', 'Try another type or genre.'); }
+        grid.insertAdjacentHTML('beforeend', d.items.map(function (c) { return mcardHtml(c); }).join(''));
+        done = !d.more; busy = false;
+      }).catch(function (e) { busy = false; page--; if (first) grid.outerHTML = empty('Could not load', errMsg(e), true); else toast(errMsg(e)); });
+    }
+    new IntersectionObserver(function (en) { if (en[0].isIntersecting && alive()) load(); }, { rootMargin: '600px' }).observe(document.getElementById('sen'));
+    document.getElementById('sorts').addEventListener('click', function (ev) { var b = ev.target.closest('[data-sort]'); if (!b) return; haptic(); r.sort = b.dataset.sort; render(r); });
+    var mt = document.getElementById('mtypes');
+    if (mt) mt.addEventListener('click', function (ev) { var b = ev.target.closest('[data-mt]'); if (!b) return; haptic(); r.mtype = b.dataset.mt; render(r); });
+  }
+
+  /* ---------- MANGA SEARCH (sirf manga) ---------- */
+  var lastMQ = '';
+  function mSearch(r, alive) {
+    app.innerHTML = '<div class="searchbar"><label class="sbox"><input id="q" type="search" inputmode="search" enterkeyhint="search" autocomplete="off" placeholder="Search manga, manhwa, manhua" aria-label="Search manga" value="' + esc(lastMQ) + '">' + ICON.search + '</label></div><div id="res"></div><div class="sentinel" id="sen"></div>';
+    var input = document.getElementById('q'), res = document.getElementById('res');
+    var timer, page = 0, busy = false, done = true, q = '', seq = 0;
+    function idle() {
+      var cr = rhist();
+      res.innerHTML = cr.length ? heading('Recently read') + '<div class="grid">' + cr.map(function (c) { return mcardHtml(c, c.label); }).join('') + '</div>' : '<p class="note">Type a name. Part of a name works too, like "solo lev".</p>';
+    }
+    function run(t) {
+      q = t.trim(); lastMQ = t;
+      if (!q) { done = true; idle(); return; }
+      page = 0; done = false; busy = false;
+      res.innerHTML = '<div class="grid" id="grid">' + skel(6) + '</div>';
+      more(true);
+    }
+    function more(fresh) {
+      if (busy || done || !q) return; busy = true; page++;
+      var my = ++seq;
+      api('/api/manga/search?q=' + encodeURIComponent(q) + '&page=' + page).then(function (d) {
+        if (!alive() || my !== seq) return;
+        var grid = document.getElementById('grid');
+        if (fresh) grid.innerHTML = '';
+        if (!d.total) { res.innerHTML = empty('No manga found for "' + q + '"', 'Check the spelling or type a shorter part of the name.'); done = true; busy = false; return; }
+        grid.insertAdjacentHTML('beforeend', d.items.map(function (c) { return mcardHtml(c); }).join(''));
+        done = !d.more; busy = false;
+      }).catch(function (e) { busy = false; if (my === seq) toast(errMsg(e)); });
+    }
+    input.addEventListener('input', function () { clearTimeout(timer); timer = setTimeout(function () { run(input.value); }, 250); });
+    input.addEventListener('keydown', function (e) { if (e.key === 'Enter') { input.blur(); clearTimeout(timer); run(input.value); } });
+    new IntersectionObserver(function (en) { if (en[0].isIntersecting && alive()) more(false); }, { rootMargin: '600px' }).observe(document.getElementById('sen'));
+    if (lastMQ) run(lastMQ); else idle();
+    if (r.focus) setTimeout(function () { input.focus(); }, 60);
+  }
+
+  /* ---------- LIBRARY ---------- */
+  function mLib(r, alive) {
+    var cr = rhist();
+    app.innerHTML = '<div class="ph"><h1>Library</h1><p>' + (cr.length ? cr.length + ' manga you have read' : '&nbsp;') + '</p></div>' +
+      (cr.length ? '<div class="grid">' + cr.map(function (c) { return mcardHtml(c, c.label); }).join('') + '</div>' : empty('Nothing here yet', 'Manga you read will show up here, so you can continue where you left off.'));
+  }
+
+  /* ---------- MANGA PAGE ---------- */
+  var CH_STEP = 100;
+  function mTitle(r, alive) {
+    app.innerHTML = '<div class="tpage"><div class="tposter"><div class="pimg sk"></div></div><div class="sk skt" style="width:60%;height:22px;margin:18px auto"></div></div>';
+    getManga(r.slug).then(function (m) {
+      if (!alive()) return;
+      var ch = m.chapters || [], h = rfind(m.slug);
+      var meta = [m.type, m.status, m.year].filter(Boolean);
+      if (m.authors && m.authors.length) meta.push('by ' + m.authors.slice(0, 2).join(', '));
+      var html = '<div class="tpage"><div class="tbg" style="background-image:url(\'' + esc(m.cover || '') + '\')"></div>' +
+        '<div class="tposter">' + poster(m.cover, m.title) + '</div><div class="ttl">' + esc(m.title) + '</div>' +
+        (meta.length ? '<div class="mmeta">' + esc(meta.join(' · ')) + '</div>' : '') +
+        (m.genres && m.genres.length ? '<div class="mtags">' + m.genres.slice(0, 8).map(function (g) { return '<span>' + esc(g) + '</span>'; }).join('') + '</div>' : '');
+      if (ch.length) {
+        var firstC = ch[ch.length - 1], lastC = ch[0];
+        html += '<div class="two">' +
+          '<button class="ob white" data-mread="' + esc(h ? h.key : firstC.key) + '"' + (h && h.page ? ' data-page="' + h.page + '"' : '') + '>' + ICON.book + '<span><b>' + (h ? 'Continue' : 'Start reading') + '</b><small>' + esc(h ? h.label : firstC.label) + '</small></span></button>' +
+          '<button class="ob" data-mread="' + esc(lastC.key) + '">' + ICON.book + '<span><b>Latest</b><small>' + esc(lastC.label) + '</small></span></button></div>';
+      }
+      if (m.description) html += '<div class="box"><h3>Story</h3><p class="clamp" id="ov">' + esc(m.description) + '</p><button class="rm" id="ovb">Read more</button></div>';
+      html += '<div class="chhead"><span class="bar"></span><h2>Chapters (' + ch.length + ')</h2>' + (ch.length > 1 ? '<button id="chsort">' + (r.asc ? 'Oldest first' : 'Newest first') + ' ⇅</button>' : '') + '</div>';
+      if (ch.length > 30) html += '<label class="chfind"><input id="chq" type="search" inputmode="decimal" placeholder="Go to chapter number" aria-label="Find chapter"></label>';
+      html += ch.length ? '<div class="chlist" id="chl"></div><button class="btn dark chmore hidden" id="chm">Show more chapters</button>' : '<p class="note">No chapters yet. New chapters show up here automatically.</p>';
+      app.innerHTML = html + '</div>';
+      var ov = document.getElementById('ov'), ovb = document.getElementById('ovb');
+      if (ov && ovb) { if (ov.scrollHeight <= ov.clientHeight + 2) ovb.remove(); else ovb.onclick = function () { ov.classList.toggle('clamp'); ovb.textContent = ov.classList.contains('clamp') ? 'Read more' : 'Show less'; }; }
+      if (!ch.length) return;
+      var list = r.asc ? ch.slice().reverse() : ch, shown = 0, filt = null;
+      var readSet = {}; (ls('crd_' + m.slug) || []).forEach(function (k) { readSet[k] = 1; });
+      var box = document.getElementById('chl'), moreBtn = document.getElementById('chm');
+      function rows(arr) {
+        return arr.map(function (c) {
+          var cls = 'chrow' + (h && h.key === c.key ? ' now' : readSet[c.key] ? ' read' : '');
+          return '<button class="' + cls + '" data-mread="' + esc(c.key) + '"><span>' + esc(c.label) + '</span><small>' + esc(c.date || '') + '</small></button>';
+        }).join('');
+      }
+      function draw(reset) {
+        var src = filt || list;
+        if (reset) { box.innerHTML = ''; shown = 0; }
+        box.insertAdjacentHTML('beforeend', rows(src.slice(shown, shown + CH_STEP)));
+        shown += CH_STEP;
+        moreBtn.classList.toggle('hidden', shown >= src.length);
+        if (filt && !filt.length) box.innerHTML = '<p class="note">No chapter with that number.</p>';
+      }
+      draw(true);
+      moreBtn.onclick = function () { haptic(); draw(false); };
+      var sb = document.getElementById('chsort');
+      if (sb) sb.onclick = function () { haptic(); r.asc = !r.asc; list = r.asc ? ch.slice().reverse() : ch; sb.textContent = (r.asc ? 'Oldest first' : 'Newest first') + ' ⇅'; draw(true); };
+      var qi = document.getElementById('chq');
+      if (qi) qi.addEventListener('input', function () {
+        var v = qi.value.trim();
+        filt = v ? list.filter(function (c) { return c.num != null && String(c.num).indexOf(v) === 0; }) : null;
+        draw(true);
+      });
+    }).catch(function (e) {
+      if (!alive() || gate(e, r, alive)) return;
+      app.innerHTML = empty(e.code === 'age_blocked' ? 'Not available' : 'Could not load', e.code === 'not_found' ? 'This manga was not found.' : errMsg(e), e.code !== 'age_blocked' && e.code !== 'not_found');
+    });
+  }
+
+  /* ---------- READER ---------- */
+  var readerEl = null;
+  function closeReader() {
+    if (!readerEl) return;
+    if (readerEl._cleanup) readerEl._cleanup();
+    readerEl.remove(); readerEl = null;
+    document.body.classList.remove('reading');
+    nav.classList.remove('hidden');
+  }
+  function mRead(r, alive) {
+    nav.classList.add('hidden');
+    document.body.classList.add('reading');
+    var ov = document.createElement('div');
+    ov.className = 'reader';
+    ov.innerHTML = '<div class="rs" id="rs"><div class="rz" id="rz"></div></div><div class="rload" id="rl">Loading chapter...</div>' +
+      '<div class="rbar rtop"><button class="x" data-rx aria-label="Close">' + ICON.close + '</button><div class="tt"><b id="rtt">&nbsp;</b><small id="rch">&nbsp;</small></div><button class="zr hidden" id="zr">1x</button></div>' +
+      '<div class="rbar rbot"><div class="rprog"><i id="rpi"></i></div><button class="btn dark" id="rprev" disabled>' + ICON.prev + 'Prev</button><div class="pc" id="rpc">&nbsp;</div><button class="btn white" id="rnext" disabled>Next' + ICON.next + '</button></div>' +
+      '<div class="zhint" id="zh"></div>';
+    document.body.appendChild(ov);
+    readerEl = ov;
+    var rs = ov.querySelector('#rs'), rz = ov.querySelector('#rz'), pc = ov.querySelector('#rpc'), pi = ov.querySelector('#rpi'), zr = ov.querySelector('#zr');
+    var pages = [], total = 0, cur = 0, chapters = [], idx = -1, m = null, zoom = 1, saveT = 0;
+
+    function label(c) { return c ? c.label : ''; }
+    function neighbour(d) { var c = chapters[idx + d]; return c || null; } // chapters newest first: -1 = next (newer), +1 = prev (older)
+
+    Promise.all([getManga(r.slug), api('/api/manga/read', { method: 'POST', body: { slug: r.slug, key: r.key } })]).then(function (res) {
+      if (!alive()) return;
+      m = res[0]; var d = res[1];
+      chapters = m.chapters || [];
+      idx = chapters.findIndex(function (c) { return c.key === r.key; });
+      var me = chapters[idx] || { key: r.key, label: d.label };
+      ov.querySelector('#rtt').textContent = m.title;
+      ov.querySelector('#rch').textContent = me.label;
+      var nx = neighbour(-1), pv = neighbour(1);
+      var bp = ov.querySelector('#rprev'), bn = ov.querySelector('#rnext');
+      bp.disabled = !pv; bn.disabled = !nx;
+      bp.onclick = function () { if (pv) { haptic(); go({ name: 'mread', tab: r.tab, slug: r.slug, key: pv.key }, { replace: true }); } };
+      bn.onclick = function () { if (nx) { haptic(); go({ name: 'mread', tab: r.tab, slug: r.slug, key: nx.key }, { replace: true }); } };
+      pages = d.pages; total = pages.length;
+      ov.querySelector('#rl').remove();
+      rz.innerHTML = pages.map(function (p, i) { return '<div class="rpg" data-i="' + i + '"><span class="pn">Page ' + (i + 1) + '</span></div>'; }).join('') +
+        '<div class="rend"><h3>End of ' + esc(me.label) + '</h3><p>' + esc(m.title) + '</p>' +
+        (nx ? '<button class="btn white" data-rgo="' + esc(nx.key) + '">Next: ' + esc(nx.label) + '</button>' : '<p>You are up to date. New chapters show up automatically.</p>') +
+        '<button class="btn dark" data-rx>Back to chapters</button></div>';
+      // mark read
+      var rd = ls('crd_' + m.slug) || []; if (rd.indexOf(r.key) < 0) { rd.push(r.key); ls('crd_' + m.slug, rd.slice(-3000)); }
+      setupImages();
+      if (r.page && r.page > 1) setTimeout(function () { var el = rz.querySelector('[data-i="' + (r.page - 1) + '"]'); if (el) rs.scrollTop = el.offsetTop - 56; }, 400);
+      update();
+      // agla chapter pehle se tayyar (photos ke link)
+      if (nx) setTimeout(function () { if (alive()) api('/api/manga/read', { method: 'POST', body: { slug: r.slug, key: nx.key } }).catch(function () {}); }, 4000);
+    }).catch(function (e) {
+      if (!alive()) return;
+      if (e.code === 'age_required') { closeReader(); gate(e, r, alive); return; }
+      var t = e.code === 'no_pages' ? 'This chapter has no pages yet.' : e.code === 'source_down' ? 'The manga source is not responding. Try again in a minute.' : errMsg(e);
+      ov.querySelector('#rl').innerHTML = '<div class="empty"><h2>Could not open chapter</h2><p>' + esc(t) + '</p><button class="btn dark" data-rretry>Try again</button></div>';
+    });
+
+    /* photos: paas wali pehle, door wali baad mein; na khule to backup link, phir "Tap to retry" */
+    var io;
+    function loadImg(box) {
+      if (box._started) return; box._started = true;
+      var i = +box.dataset.i, p = pages[i], im = new Image(), tried = 0;
+      im.decoding = 'async'; im.referrerPolicy = 'no-referrer'; im.alt = 'Page ' + (i + 1); im.draggable = false;
+      im.onload = function () { box.classList.add('ok'); var t = box.querySelector('.rt'); if (t) t.remove(); if (!im.parentNode) box.appendChild(im); };
+      im.onerror = function () {
+        tried++;
+        if (tried === 1) { im.src = p.b; return; }
+        if (tried === 2) { im.src = p.u + (p.u.indexOf('?') < 0 ? '?' : '&') + 'r=' + Date.now(); return; }
+        if (!box.querySelector('.rt')) box.insertAdjacentHTML('beforeend', '<button class="rt" data-rimg>Tap to retry</button>');
+        box._retry = function () { tried = 0; im.src = p.u; };
+      };
+      im.src = p.u;
+    }
+    function setupImages() {
+      var boxes = rz.querySelectorAll('.rpg');
+      for (var i = 0; i < Math.min(3, boxes.length); i++) loadImg(boxes[i]);
+      io = new IntersectionObserver(function (en) { en.forEach(function (x) { if (x.isIntersecting) loadImg(x.target); }); }, { root: rs, rootMargin: '1800px 0px' });
+      boxes.forEach(function (b) { io.observe(b); });
+    }
+
+    /* progress + Continue reading */
+    function update() {
+      if (!total) return;
+      var mid = rs.scrollTop + rs.clientHeight * 0.35, boxes = rz.querySelectorAll('.rpg'), n = 0;
+      for (var i = 0; i < boxes.length; i++) { if (boxes[i].offsetTop * 1 <= mid) n = i; else break; }
+      cur = n;
+      pc.textContent = (n + 1) + ' / ' + total;
+      var max = rs.scrollHeight - rs.clientHeight;
+      pi.style.width = (max > 0 ? Math.min(100, (rs.scrollTop / max) * 100) : 0) + '%';
+      clearTimeout(saveTO);
+      if (Date.now() - saveT > 1500) save(); else saveTO = setTimeout(save, 1600);
+    }
+    var saveTO = 0;
+    function save() {
+      if (!m) return;
+      saveT = Date.now();
+      var me = chapters[idx] || { key: r.key, label: '' };
+      rhist({ slug: m.slug, title: m.title, cover: m.cover, key: r.key, label: me.label.replace(/^Chapter\s*/i, 'Ch '), page: cur + 1, at: saveT });
+    }
+    var ticking = false;
+    rs.addEventListener('scroll', function () { if (!ticking) { ticking = true; requestAnimationFrame(function () { ticking = false; update(); }); } }, { passive: true });
+
+    /* ---------- zoom: pinch, double-tap, 1x button ---------- */
+    var hint = ov.querySelector('#zh'), hintT;
+    function showHint(t) { hint.textContent = t; hint.classList.add('on'); clearTimeout(hintT); hintT = setTimeout(function () { hint.classList.remove('on'); }, 700); }
+    function baseW() { return Math.min(rs.clientWidth, 900); }
+    function setZoom(z, cx, cy) {
+      z = Math.max(1, Math.min(4, z));
+      var oldW = rz.offsetWidth, offL = rz.offsetLeft;
+      var x = rs.scrollLeft + cx - offL, y = rs.scrollTop + cy;
+      var ratio = (baseW() * z) / oldW;
+      zoom = z;
+      rz.style.width = z === 1 ? '' : (baseW() * z) + 'px';
+      var newOff = rz.offsetLeft;
+      rs.scrollLeft = x * ratio - cx + newOff;
+      rs.scrollTop = y * ratio - cy;
+      zr.classList.toggle('hidden', z <= 1.01);
+      zr.textContent = 'Reset ' + z.toFixed(1) + 'x';
+    }
+    zr.onclick = function () { haptic(); setZoom(1, rs.clientWidth / 2, rs.clientHeight / 2); showHint('1x'); };
+    var pinch = null, tap = null, lastTap = 0, tapT = null;
+    rs.addEventListener('touchstart', function (e) {
+      if (e.touches.length === 2) {
+        var a = e.touches[0], b = e.touches[1];
+        pinch = { d: Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY), z: zoom, cx: (a.clientX + b.clientX) / 2, cy: (a.clientY + b.clientY) / 2 };
+        tap = null;
+      } else if (e.touches.length === 1) {
+        tap = { x: e.touches[0].clientX, y: e.touches[0].clientY, t: Date.now(), moved: false };
+      }
+    }, { passive: true });
+    var raf = 0, pend = null;
+    rs.addEventListener('touchmove', function (e) {
+      if (pinch && e.touches.length === 2) {
+        e.preventDefault();
+        var a = e.touches[0], b = e.touches[1];
+        var d = Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY);
+        pend = pinch.z * d / pinch.d;
+        if (!raf) raf = requestAnimationFrame(function () { raf = 0; if (pend) setZoom(pend, pinch ? pinch.cx : rs.clientWidth / 2, pinch ? pinch.cy : rs.clientHeight / 2); });
+      } else if (tap) {
+        var t = e.touches[0];
+        if (Math.abs(t.clientX - tap.x) > 10 || Math.abs(t.clientY - tap.y) > 10) tap.moved = true;
+      }
+    }, { passive: false });
+    rs.addEventListener('touchend', function (e) {
+      if (pinch && e.touches.length < 2) { pinch = null; showHint(zoom.toFixed(1) + 'x'); return; }
+      if (!tap || tap.moved || Date.now() - tap.t > 300) { tap = null; return; }
+      if (e.target.closest('button')) { tap = null; return; }
+      var x = tap.x, y = tap.y; tap = null;
+      var now = Date.now();
+      if (now - lastTap < 300) { // double tap: zoom
+        clearTimeout(tapT); lastTap = 0;
+        haptic();
+        setZoom(zoom > 1.05 ? 1 : 2.5, x, y);
+        showHint(zoom > 1.05 ? zoom.toFixed(1) + 'x' : '1x');
+        e.preventDefault();
+        return;
+      }
+      lastTap = now;
+      tapT = setTimeout(function () { ov.classList.toggle('bare'); }, 300); // single tap: bars show/hide
+    });
+    // computer pe: double click se zoom
+    rs.addEventListener('dblclick', function (e) { setZoom(zoom > 1.05 ? 1 : 2, e.clientX, e.clientY); });
+
+    ov.addEventListener('click', function (ev) {
+      var el;
+      if ((el = ev.target.closest('[data-rx]'))) { haptic(); back(); return; }
+      if ((el = ev.target.closest('[data-rgo]'))) { haptic('medium'); go({ name: 'mread', tab: r.tab, slug: r.slug, key: el.dataset.rgo }, { replace: true }); return; }
+      if ((el = ev.target.closest('[data-rimg]'))) { var bx = el.closest('.rpg'); el.remove(); if (bx && bx._retry) bx._retry(); return; }
+      if (ev.target.closest('[data-rretry]')) { cache.clear(); render(r); }
+    });
+    function onResize() { if (zoom > 1) rz.style.width = (baseW() * zoom) + 'px'; }
+    window.addEventListener('resize', onResize);
+    ov._cleanup = function () { if (io) io.disconnect(); window.removeEventListener('resize', onResize); clearTimeout(tapT); clearTimeout(saveTO); if (m && total) save(); };
+  }
+
   /* ---------- clicks ---------- */
   document.addEventListener('click', function (ev) {
     var t = ev.target, el;
     if ((el = t.closest('[data-retry]'))) { haptic(); cache.clear(); render(current); return; }
+    if ((el = t.closest('[data-mode]'))) { haptic(); setMode(el.dataset.mode); return; }
+    if ((el = t.closest('[data-mopen]'))) { haptic(); go({ name: 'mtitle', tab: current && current.tab, slug: el.dataset.mopen }); return; }
+    if ((el = t.closest('[data-mread]'))) {
+      haptic('medium');
+      var ms = current && (current.slug); if (!ms) return;
+      go({ name: 'mread', tab: current.tab, slug: ms, key: el.dataset.mread, page: +el.dataset.page || 0 });
+      return;
+    }
+    if ((el = t.closest('[data-mgenre]'))) { haptic(); go({ name: 'mlist', tab: 'mbrowse', genre: el.dataset.mgenre }); return; }
     if ((el = t.closest('[data-open]'))) {
       haptic(); var p = el.dataset.open.split('|');
       var h = hist().find(function (x) { return x.type === p[0] && x.slug === p[1]; });
@@ -894,17 +1328,24 @@ body.lock{overflow:hidden}
     if ((el = t.closest('[data-playmovie]'))) { haptic('medium'); go({ name: 'play', tab: current.tab, movie: el.dataset.playmovie, meta: current.meta }); return; }
     if ((el = t.closest('[data-more]'))) {
       haptic(); var m = el.dataset.more.split('|');
+      if (m[0] === 'lib') { go({ name: 'mlib', tab: 'mlib' }, { root: true }); return; }
+      if (m[0] === 'mall') { go({ name: 'mlist', tab: 'mbrowse' }); return; }
+      if (m[0] === 'mtype') { go({ name: 'mlist', tab: 'mbrowse', mtype: m[1] }); return; }
       go({ name: 'list', tab: 'home', type: m[0] === 'series' || m[0] === 'movie' ? m[0] : '', genre: m[0] === 'genre' ? m[1] : '' });
       return;
     }
     if ((el = t.closest('[data-genre]'))) { haptic(); go({ name: 'list', tab: 'home', genre: el.dataset.genre }); return; }
     if ((el = t.closest('[data-lang]'))) { haptic(); go({ name: 'list', tab: 'home', lang: el.dataset.lang }); return; }
-    if ((el = t.closest('[data-tab-go]'))) { haptic(); go({ name: 'search', tab: 'search', focus: true }, { root: true }); }
+    if ((el = t.closest('[data-tab-go]'))) { haptic(); if (mode === 'manga') go({ name: 'msearch', tab: 'msearch', focus: true }, { root: true }); else go({ name: 'search', tab: 'search', focus: true }, { root: true }); }
   });
   nav.addEventListener('click', function (ev) {
     var b = ev.target.closest('[data-tab]'); if (!b) return;
     haptic(); var tab = b.dataset.tab;
-    if (tab === 'home') go({ name: 'home', tab: 'home' }, { root: true });
+    if (tab === 'mhome') go({ name: 'mhome', tab: 'mhome' }, { root: true });
+    else if (tab === 'msearch') go({ name: 'msearch', tab: 'msearch', focus: true }, { root: true });
+    else if (tab === 'mbrowse') go({ name: 'mlist', tab: 'mbrowse' }, { root: true });
+    else if (tab === 'mlib') go({ name: 'mlib', tab: 'mlib' }, { root: true });
+    else if (tab === 'home') go({ name: 'home', tab: 'home' }, { root: true });
     else if (tab === 'search') go({ name: 'search', tab: 'search', focus: true }, { root: true });
     else go({ name: 'list', tab: tab, type: tab }, { root: true });
   });
@@ -914,7 +1355,8 @@ body.lock{overflow:hidden}
     app.innerHTML = LOGO.replace(/<button[\s\S]*?<\/button>/, '') + empty('Open in Telegram', 'This app only works inside Telegram. Open the bot and tap "Watch Anime".');
     return;
   }
-  go({ name: 'home', tab: 'home' }, { root: true });
+  buildNav();
+  go(mode === 'manga' ? { name: 'mhome', tab: 'mhome' } : { name: 'home', tab: 'home' }, { root: true });
   var sp = tg && tg.initDataUnsafe && tg.initDataUnsafe.start_param;
   if (sp && /^(series|movie)_[\w-]+$/.test(sp)) { var i = sp.indexOf('_'); go({ name: 'title', tab: 'home', type: sp.slice(0, i), slug: sp.slice(i + 1) }); }
 })();
