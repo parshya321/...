@@ -285,8 +285,15 @@ const tokens = new Map(); // token -> { u, src: [url], exp }
 
 function serverOptions(servers) {
   const list = (servers || []).filter((s) => s && s.url && /^https:\/\//.test(s.url));
-  list.sort((a, b) => (a.order || 0) - (b.order || 0));
-  return list.map((s, n) => ({ n, name: s.server || `Server ${n + 1}`, lang: s.lang || null, url: s.url }));
+  // Users only ever see "Server N" + language - never the host name.
+  // Order: Hindi, English, other Indian languages, Japanese, then multi-audio servers.
+  const RANK = ['hindi', 'english', 'tamil', 'telugu', 'malayalam', 'kannada', 'bengali', 'marathi', 'gujarati', 'odia', 'punjabi', 'japanese'];
+  const rank = (s) => { const l = String(s.lang || '').trim().toLowerCase(); if (!l) return 100; const i = RANK.indexOf(l); return i < 0 ? 50 : i; };
+  list.sort((a, b) => rank(a) - rank(b) || (a.order || 0) - (b.order || 0));
+  return list.map((s, n) => {
+    const l = String(s.lang || '').trim();
+    return { n, label: l ? l.charAt(0).toUpperCase() + l.slice(1) : 'All languages + subtitles', url: s.url };
+  });
 }
 
 function makeToken(userId, opts) {
@@ -491,7 +498,7 @@ function createHandler(db) {
     json(req, res, 200, {
       title: t.title, label, token,
       player: `/p/${token}`,
-      options: opts.map((o) => ({ n: o.n, name: o.name, lang: o.lang })),
+      options: opts.map((o) => ({ n: o.n, label: o.label })),
       prev: nav.prev, next: nav.next,
       expires_in: CFG.tokenTtl,
     });
