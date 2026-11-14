@@ -133,6 +133,7 @@ button:focus-visible,input:focus-visible{outline:2px solid #fff;outline-offset:2
 .ep.off{opacity:.35}
 .ep.now .th{outline:2px solid #fff;outline-offset:-2px}
 .note{color:var(--dim);font-size:14px;padding:12px var(--pad) 0;margin:0}
+.relink{background:none;border:0;padding:0;font:inherit;font-weight:700;color:var(--fg,#fff);text-decoration:underline;text-underline-offset:3px;cursor:pointer}
 
 /* player */
 .player{position:sticky;top:0;z-index:15;background:#000}
@@ -760,9 +761,28 @@ body.lock{overflow:hidden}
     function fetchPlay() { return api('/api/play', { method: 'POST', body: body }).then(function (d) { d.at = Date.now(); st = d; return d; }); }
     function frame() {
       var n = Math.min(opt, st.options.length - 1);
-      app.querySelector('.frame').innerHTML = '<div class="wait">Loading video...</div><iframe src="' + esc(st.player) + '?o=' + n +
-        '" allow="autoplay; fullscreen; encrypted-media; picture-in-picture" allowfullscreen referrerpolicy="no-referrer" title="' + esc(st.title) + '"></iframe>';
+      var box = app.querySelector('.frame');
+      box.innerHTML = '<div class="wait">Loading video...</div>';
+      var ifr = document.createElement('iframe');
+      ifr.setAttribute('allow', 'autoplay; fullscreen; encrypted-media; picture-in-picture');
+      ifr.setAttribute('allowfullscreen', '');
+      ifr.setAttribute('referrerpolicy', 'no-referrer');
+      ifr.title = st.title;
+      // agar player page 10 sec me load na ho to ek baar khud dobara try karo
+      var tries = 0, guard;
+      function load() {
+        clearTimeout(guard);
+        ifr.src = st.player + '?o=' + n + '&r=' + Date.now();
+        guard = setTimeout(function () { if (alive() && tries++ < 1 && ifr.isConnected) load(); }, 10000);
+      }
+      ifr.onload = function () { clearTimeout(guard); };
+      box.appendChild(ifr);
+      load();
       layout();
+    }
+    function mark() {
+      var n = Math.min(opt, st.options.length - 1);
+      [].forEach.call(document.querySelectorAll('#srv [data-opt]'), function (b) { b.classList.toggle('on', +b.dataset.opt === n); });
     }
 
     /* ----- full screen (VLC jaisa): landscape + Fit / Fill / Stretch ----- */
@@ -815,7 +835,7 @@ body.lock{overflow:hidden}
         '<button class="btn white" data-nav="next"' + (st.next ? '' : ' disabled') + '>Next' + ICON.next + '</button></div>';
       html += heading('Select server') + '<div class="servers" id="srv">' + st.options.map(function (o) {
         return '<button class="srv' + (o.n === n ? ' on' : '') + '" data-opt="' + o.n + '"><b>Server ' + (o.n + 1) + '</b><small>' + esc(o.label || '') + '</small></button>';
-      }).join('') + '</div><p class="note">If the video does not play, try another server.</p>';
+      }).join('') + '</div><p class="note">Video stuck? <button class="relink" data-reload="1">Reload</button> or try another server.</p>';
       if (r.meta && r.meta.type === 'series') html += '<div id="more"></div>';
       document.getElementById('pbody').innerHTML = html;
     }
@@ -839,11 +859,13 @@ body.lock{overflow:hidden}
     });
     app.addEventListener('click', function (ev) {
       if (!alive() || !st) return;
-      var b = ev.target.closest('[data-opt]');
+      var b = ev.target.closest('[data-opt],[data-reload]');
       if (b) {
-        haptic(); opt = +b.dataset.opt; ls('opt', opt);
+        // same server dobara tap karo ya Reload dabao = video dobara load
+        haptic(); if (b.dataset.opt != null) { opt = +b.dataset.opt; ls('opt', opt); }
         var fresh = Date.now() - st.at < (st.expires_in - 20) * 1000;
-        (fresh ? Promise.resolve() : fetchPlay()).then(function () { if (alive()) { frame(); info(); seasonGrid(); } }).catch(function (e) { toast(errMsg(e)); });
+        mark();
+        (fresh ? Promise.resolve() : fetchPlay()).then(function () { if (alive()) { frame(); mark(); } }).catch(function (e) { toast(errMsg(e)); });
         return;
       }
       var n = ev.target.closest('[data-nav]');
