@@ -823,4 +823,4 @@ module.exports = { adminText, watching, todayStart, checkInitData, buildStore, s
 if (require.main === module) {
   process.on('unhandledRejection', (e) => log('unhandledRejection', e && e.message));
   main().catch((e) => { console.error(e); process.exit(1); });
-}
+} 
