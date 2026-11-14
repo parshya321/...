@@ -286,9 +286,10 @@ const tokens = new Map(); // token -> { u, src: [url], exp }
 function serverOptions(servers) {
   const list = (servers || []).filter((s) => s && s.url && /^https:\/\//.test(s.url));
   // Users only ever see "Server N" + language - never the host name.
-  // Order: Hindi, English, other Indian languages, Japanese, then multi-audio servers.
+  // Order: multi-audio servers first (they play inside Telegram), then Hindi, English,
+  // other Indian languages, Japanese.
   const RANK = ['hindi', 'english', 'tamil', 'telugu', 'malayalam', 'kannada', 'bengali', 'marathi', 'gujarati', 'odia', 'punjabi', 'japanese'];
-  const rank = (s) => { const l = String(s.lang || '').trim().toLowerCase(); if (!l) return 100; const i = RANK.indexOf(l); return i < 0 ? 50 : i; };
+  const rank = (s) => { const l = String(s.lang || '').trim().toLowerCase(); if (!l) return -1; const i = RANK.indexOf(l); return i < 0 ? 50 : i; };
   list.sort((a, b) => rank(a) - rank(b) || (a.order || 0) - (b.order || 0));
   return list.map((s, n) => {
     const l = String(s.lang || '').trim();
