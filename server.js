@@ -299,6 +299,7 @@ function adminAlert(text) {
 /* ------------------------------------------------------------------ */
 const tokens = new Map(); // token -> { u, src: [url], exp }
 
+const imgSalt = 'srv:' + (process.env.BOT_TOKEN || 'ia').slice(-12); // stable per deploy, never sent to users
 function serverOptions(servers) {
   const list = (servers || []).filter((s) => s && s.url && /^https:\/\//.test(s.url));
   // Users only ever see "Server N" + language - never the host name.
@@ -309,7 +310,11 @@ function serverOptions(servers) {
   list.sort((a, b) => rank(a) - rank(b) || (a.order || 0) - (b.order || 0));
   return list.map((s, n) => {
     const l = String(s.lang || '').trim();
-    return { n, label: l ? l.charAt(0).toUpperCase() + l.slice(1) : 'All languages + subtitles', url: s.url };
+    // h = short anonymous id of the host, so the app can remember which server is fastest
+    // for this user without ever seeing the host name
+    let h = '';
+    try { h = crypto.createHash('sha1').update(imgSalt + new URL(s.url).hostname).digest('hex').slice(0, 8); } catch (e) { /* bad url */ }
+    return { n, label: l ? l.charAt(0).toUpperCase() + l.slice(1) : 'All languages + subtitles', url: s.url, h };
   });
 }
 
@@ -321,9 +326,10 @@ function makeToken(userId, opts) {
 
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
+function origin(u) { try { return new URL(u).origin; } catch (e) { return ''; } }
 function playerHtml(src) {
   return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<meta name="referrer" content="no-referrer"><title>Player</title>
+<meta name="referrer" content="no-referrer"><title>Player</title>${origin(src) ? `<link rel="preconnect" href="${esc(origin(src))}"><link rel="dns-prefetch" href="${esc(origin(src))}">` : ''}
 <style>html,body{margin:0;height:100%;background:#000;overflow:hidden}iframe{position:fixed;inset:0;width:100%;height:100%;border:0}</style>
 </head><body oncontextmenu="return false">
 <iframe src="${esc(src)}" sandbox="allow-scripts allow-same-origin allow-presentation" referrerpolicy="no-referrer"
@@ -715,11 +721,21 @@ function createHandler(db) {
     const prev = watching.get(id);
     watching.set(id, { user: ctx.user, title: t.title, label: short, key, since: prev && prev.key === key ? prev.since : Date.now(), at: Date.now() });
     try { db.collection('plays').insertOne({ ts: new Date(), user: id, title: t.title, slug: t.slug, type: t.type, label: short }).catch(() => {}); } catch (e) { /* stats kabhi play nahi rokenge */ }
+    // Next episode ready in advance: when the user taps Next the video starts at once,
+    // without waiting for another round trip. Not counted as a play until it is opened.
+    let pre = null;
+    if (nav.next) {
+      try {
+        const nx = await db.collection('episodes').findOne({ _id: nav.next }, { projection: { servers: 1 } });
+        const nopts = serverOptions(nx && nx.servers);
+        if (nopts.length) pre = { episode: nav.next, player: `/p/${makeToken(id, nopts)}`, options: nopts.map((o) => ({ n: o.n, label: o.label, h: o.h })) };
+      } catch (e) { /* optional */ }
+    }
     json(req, res, 200, {
       title: t.title, label, token,
       player: `/p/${token}`,
-      options: opts.map((o) => ({ n: o.n, label: o.label })),
-      prev: nav.prev, next: nav.next,
+      options: opts.map((o) => ({ n: o.n, label: o.label, h: o.h })),
+      prev: nav.prev, next: nav.next, pre,
       expires_in: CFG.tokenTtl,
     });
   }
