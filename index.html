@@ -8,6 +8,14 @@
 <title>Infinite Animes</title>
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
 <link rel="preconnect" href="https://image.tmdb.org" crossorigin>
+<script>
+/* Weak phone? (2 GB RAM or less, 4 cores or less, data saver, 2G) -> light mode: no blur, no shadows, smaller images */
+(function () { try {
+  var n = navigator, c = n.connection || {};
+  var lite = (n.deviceMemory && n.deviceMemory <= 2) || (n.hardwareConcurrency && n.hardwareConcurrency <= 4) || c.saveData === true || /(^|-)2g$/.test(c.effectiveType || '');
+  if (lite) document.documentElement.className += ' lite';
+} catch (e) {} })();
+</script>
 <style>
 :root{
   --bg:#000; --panel:#111; --panel2:#1a1a1a; --line:#2a2a2a; --text:#fff; --dim:#9a9a9a; --on:#000;
@@ -140,7 +148,13 @@ button:focus-visible,input:focus-visible{outline:2px solid #fff;outline-offset:2
 .player .stage{position:relative}
 .player .frame{position:relative;width:100%;aspect-ratio:16/9;background:#000;overflow:hidden}
 .player iframe{position:absolute;inset:0;width:100%;height:100%;border:0}
-.player .wait{position:absolute;inset:0;display:grid;place-items:center;color:var(--dim);font-size:14px}
+.player .wait{position:absolute;inset:0;z-index:2;display:grid;place-items:center;align-content:center;gap:12px;color:#ddd;font-size:14px;font-weight:600;background:#000;pointer-events:none;transition:opacity .3s}
+.player .wait img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;opacity:.45}
+.player .wait .spin,.player .wait span{position:relative}
+.player .wait .spin{width:38px;height:38px;border-radius:50%;border:3px solid rgba(255,255,255,.25);border-top-color:#fff;animation:spin .8s linear infinite}
+.player .wait.gone{opacity:0}
+.player .wait.gone .spin{animation:none}
+@keyframes spin{to{transform:rotate(360deg)}}
 .fsbtn{position:absolute;right:8px;top:8px;z-index:3;width:36px;height:36px;border-radius:10px;background:rgba(0,0,0,.55);display:grid;place-items:center}
 .fsbtn svg{width:20px;height:20px}
 .fsbar{display:none}
@@ -230,6 +244,15 @@ body.lock{overflow:hidden}
 #intro .arm.l{left:-3%}#intro .arm.r{right:-3%}
 #intro .foot{position:absolute;bottom:-7%;width:27%;height:15%;border-radius:50% 50% 42% 42%;background:#9d9d9d;will-change:transform}
 #intro .foot.l{left:16%}#intro .foot.r{right:16%}
+/* smooth scrolling on long lists: cards off screen are not drawn */
+.grid>.card{content-visibility:auto;contain-intrinsic-size:auto 230px}
+/* light mode for weak phones */
+.lite .tbg{filter:none;transform:none;opacity:.2}
+.lite .tposter{box-shadow:none}
+.lite .pimg img,.lite .th img{transition:none}
+.lite .sk{animation:none}
+.lite .nav{background:#000}
+.lite .modal{background:rgba(0,0,0,.9)}
 @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
 
 /* ===== Anime | Manga switch ===== */
@@ -593,9 +616,13 @@ body.reading{overflow:hidden}
   }
 
   /* ---------- markup ---------- */
+  var LITE = document.documentElement.classList.contains('lite');
+  var TOUCH = !!(window.matchMedia && matchMedia('(pointer:coarse)').matches);
+  // TMDB posters: ask for the size the card actually needs (much less data, faster scroll)
+  function sized(src, w) { return src ? String(src).replace(/(image\.tmdb\.org\/t\/p\/)(original|w\d+)\//, '$1' + w + '/') : src; }
   function img(src) { return src ? '<img loading="lazy" decoding="async" src="' + esc(src) + '" alt="" onload="this.classList.add(\'ok\')" onerror="this.remove()">' : ''; }
   function poster(src, title, badge) {
-    return '<div class="pimg">' + (badge ? '<span class="badge">' + esc(badge) + '</span>' : '') + img(src) + (src ? '' : '<div class="fb">' + esc(title) + '</div>') + '</div>';
+    return '<div class="pimg">' + (badge ? '<span class="badge">' + esc(badge) + '</span>' : '') + img(sized(src, LITE ? 'w185' : 'w342')) + (src ? '' : '<div class="fb">' + esc(title) + '</div>') + '</div>';
   }
   function card(c, badge) {
     return '<button class="card" data-open="' + esc(c.type) + '|' + esc(c.slug) + '">' + poster(c.poster, c.title, badge) + '<div class="t">' + esc(c.title) + '</div></button>';
@@ -769,7 +796,7 @@ body.reading{overflow:hidden}
     app.innerHTML = '<div class="tpage"><div class="tposter"><div class="pimg sk"></div></div><div class="sk skt" style="width:60%;height:22px;margin:18px auto"></div></div>';
     getTitle(r.type, r.slug).then(function (t) {
       if (!alive()) return;
-      r.meta = { type: t.type, slug: t.slug, title: t.title, poster: t.poster };
+      r.meta = { type: t.type, slug: t.slug, title: t.title, poster: t.poster, backdrop: t.backdrop || null };
       var facts = [];
       if (t.type === 'series' && t.seasons.length) facts.push(t.seasons.length + (t.seasons.length > 1 ? ' Seasons' : ' Season'));
       if (t.episodes) facts.push(t.episodes + ' Episodes');
@@ -813,82 +840,157 @@ body.reading{overflow:hidden}
 
   /* ---------- PLAYER ---------- */
   var FITS = ['Fit', 'Fill', 'Stretch'];
+
+  /* Fastest server memory: how long each server took to open for THIS user.
+     Servers are known only by an anonymous id (h), never by host name. */
+  var SPD = ls('spd') || {};
+  function noteSpeed(h, ms, failed) {
+    if (!h) return;
+    var x = SPD[h] || { ms: 0, n: 0, f: 0 };
+    if (failed) x.f = Math.min(5, x.f + 1);
+    else { x.ms = x.n ? Math.round(x.ms * 0.6 + ms * 0.4) : Math.round(ms); x.n = Math.min(20, x.n + 1); x.f = Math.max(0, x.f - 1); }
+    x.t = Date.now(); SPD[h] = x;
+    var k = Object.keys(SPD);
+    if (k.length > 40) { k.sort(function (a, b) { return SPD[a].t - SPD[b].t; }); delete SPD[k[0]]; }
+    ls('spd', SPD);
+  }
+  // same language the user picked last time, and among those the server that opened fastest
+  function pickServer(opts) {
+    var lang = ls('lang'), pool = opts.filter(function (o) { return o.label === lang; });
+    if (!pool.length) pool = opts;
+    var best = pool[0], bs = Infinity;
+    pool.forEach(function (o) {
+      var x = o.h && SPD[o.h];
+      var sc = (x && x.n ? x.ms : 6000 + o.n * 50) + (x ? x.f * 9000 : 0);
+      if (sc < bs) { bs = sc; best = o; }
+    });
+    return best.n;
+  }
+  var lastPre = null; // next episode, already prepared by the server
+
   function vPlay(r, alive) {
-    app.innerHTML = '<div class="player" id="player"><div class="stage"><div class="frame"><div class="wait">Loading video...</div></div>' +
+    var cov = r.thumb || (r.meta && (r.meta.backdrop || r.meta.poster)) || '';
+    app.innerHTML = '<div class="player" id="player"><div class="stage"><div class="frame"><div class="wait" id="pwait">' + (cov ? '<img src="' + esc(cov) + '" alt="" decoding="async">' : '') + '<div class="spin"></div><span>Loading video</span></div></div>' +
       '<button class="fsbtn" id="fsOpen" aria-label="Full screen">' + ICON.full + '</button>' +
       '<div class="fsbar" id="fsbar"><button id="fsFit">' + ICON.fit + '<span>Fit</span></button><button id="fsClose" aria-label="Exit full screen">' + ICON.close + '</button></div></div></div><div id="pbody"></div>';
-    var opt = ls('opt') || 0, st = null;
+    var opt = null, st = null;
+    var pre = r.pre && r.pre.episode === r.episode && Date.now() - r.pre.at < (r.pre.ttl - 30) * 1000 ? r.pre : null;
     var body = r.episode ? { episode: r.episode } : { movie: r.movie };
     var player = document.getElementById('player'), stage = player.querySelector('.stage'), fsbar = document.getElementById('fsbar');
-    var fit = ls('fit') || 0, isFs = false, dimTimer;
-    function fetchPlay() { return api('/api/play', { method: 'POST', body: body }).then(function (d) { d.at = Date.now(); st = d; return d; }); }
+    var fit = ls('fit') || 0, isFs = false, autoFs = false, dimTimer;
+    function fetchPlay() { return api('/api/play', { method: 'POST', body: body }).then(function (d) { d.at = Date.now(); st = d; lastPre = d.pre ? Object.assign({ at: d.at, ttl: d.expires_in }, d.pre) : null; return d; }); }
+    function opts() { return st ? st.options : pre.options; }
+    function src() { return st ? st.player : pre.player; }
+
     function frame() {
-      var n = Math.min(opt, st.options.length - 1);
-      var box = app.querySelector('.frame');
-      box.innerHTML = '<div class="wait">Loading video...</div>';
+      var list = opts();
+      if (opt == null) opt = pickServer(list);
+      var n = Math.min(opt, list.length - 1), o = list[n];
+      var box = app.querySelector('.frame'), wait = document.getElementById('pwait');
+      var old = box.querySelector('iframe'); if (old) old.remove();
+      wait.classList.remove('gone');
       var ifr = document.createElement('iframe');
       ifr.setAttribute('allow', 'autoplay; fullscreen; encrypted-media; picture-in-picture');
       ifr.setAttribute('allowfullscreen', '');
       ifr.setAttribute('referrerpolicy', 'no-referrer');
-      ifr.title = st.title;
-      // agar player page 10 sec me load na ho to ek baar khud dobara try karo
-      var tries = 0, guard;
+      ifr.title = (st && st.title) || 'Video';
+      // not open in 10 s: try once more, then show whatever is there
+      var tries = 0, guard, t0;
+      function reveal() { if (ifr.isConnected) wait.classList.add('gone'); }
       function load() {
-        clearTimeout(guard);
-        ifr.src = st.player + '?o=' + n + '&r=' + Date.now();
-        guard = setTimeout(function () { if (alive() && tries++ < 1 && ifr.isConnected) load(); }, 10000);
+        clearTimeout(guard); t0 = performance.now();
+        ifr.src = src() + '?o=' + n + '&r=' + Date.now();
+        guard = setTimeout(function () {
+          if (!alive() || !ifr.isConnected) return;
+          noteSpeed(o.h, 0, true);
+          if (tries++ < 1) load(); else reveal();
+        }, 10000);
       }
-      ifr.onload = function () { clearTimeout(guard); };
-      box.appendChild(ifr);
+      ifr.onload = function () {
+        if (!ifr.isConnected || !t0) return;
+        clearTimeout(guard); noteSpeed(o.h, performance.now() - t0); setTimeout(reveal, 200);
+      };
       load();
+      box.insertBefore(ifr, wait);
       layout();
     }
     function mark() {
-      var n = Math.min(opt, st.options.length - 1);
+      var n = Math.min(opt, opts().length - 1);
       [].forEach.call(document.querySelectorAll('#srv [data-opt]'), function (b) { b.classList.toggle('on', +b.dataset.opt === n); });
     }
 
-    /* ----- full screen (VLC jaisa): landscape + Fit / Fill / Stretch ----- */
+    /* ----- full screen (VLC style): landscape + Fit / Fill / Stretch ----- */
     function layout() {
       var ifr = app.querySelector('.frame iframe');
       document.getElementById('fsFit').querySelector('span').textContent = FITS[fit];
       if (!isFs) { stage.style.cssText = ''; if (ifr) ifr.style.cssText = ''; return; }
       var vw = window.innerWidth, vh = window.innerHeight;
-      var rotate = vh > vw; // phone seedha pakda hai: 90 degree ghuma do
+      var rotate = vh > vw; // phone held upright: turn the video 90 degrees
       var W = rotate ? vh : vw, H = rotate ? vw : vh;
       stage.style.cssText = 'width:' + W + 'px;height:' + H + 'px;transform:translate(-50%,-50%)' + (rotate ? ' rotate(90deg)' : '');
       if (!ifr) return;
       var ar = 16 / 9, w, h, sx = 1, sy = 1;
-      if (fit === 0) { w = W; h = H; }                                                        // Fit: poora video, kinare kaale
-      else if (fit === 1) { if (W / H > ar) { w = W; h = W / ar; } else { h = H; w = H * ar; } } // Fill: screen bhar do, thoda kat sakta hai
-      else { if (W / H > ar) { h = H; w = H * ar; } else { w = W; h = W / ar; } sx = W / w; sy = H / h; } // Stretch: kheench ke poora
+      if (fit === 0) { w = W; h = H; }                                                        // Fit: whole video, black edges
+      else if (fit === 1) { if (W / H > ar) { w = W; h = W / ar; } else { h = H; w = H * ar; } } // Fill: fill the screen, may crop
+      else { if (W / H > ar) { h = H; w = H * ar; } else { w = W; h = W / ar; } sx = W / w; sy = H / h; } // Stretch
       ifr.style.cssText = 'width:' + w + 'px;height:' + h + 'px;left:' + (W - w) / 2 + 'px;top:' + (H - h) / 2 + 'px;transform:scale(' + sx + ',' + sy + ');transform-origin:center';
     }
     function wake() { fsbar.classList.remove('dim'); clearTimeout(dimTimer); dimTimer = setTimeout(function () { fsbar.classList.add('dim'); }, 3000); }
     function v8() { return tg && tg.isVersionAtLeast && tg.isVersionAtLeast('8.0'); }
-    function enterFs() {
-      isFs = true; player.classList.add('fs'); document.body.classList.add('lock');
+    function enterFs(auto) {
+      isFs = true; autoFs = !!auto; player.classList.add('fs'); document.body.classList.add('lock');
       try { if (v8() && tg.requestFullscreen) tg.requestFullscreen(); } catch (e) {}
-      try { if (v8() && tg.lockOrientation) tg.lockOrientation(); } catch (e) {}
+      // manual full screen keeps the phone's current side; auto (from rotating) must stay free to rotate back
+      try { if (!auto && v8() && tg.lockOrientation) tg.lockOrientation(); } catch (e) {}
       if (tg && tg.BackButton) tg.BackButton.show();
       fsExit = exitFs; layout(); wake();
     }
     function exitFs() {
-      isFs = false; fsExit = null; player.classList.remove('fs'); document.body.classList.remove('lock');
+      isFs = false; autoFs = false; fsExit = null; player.classList.remove('fs'); document.body.classList.remove('lock');
       try { if (v8() && tg.isFullscreen && tg.exitFullscreen) tg.exitFullscreen(); } catch (e) {}
       try { if (v8() && tg.unlockOrientation) tg.unlockOrientation(); } catch (e) {}
       if (tg && tg.BackButton && !stack.length) tg.BackButton.hide();
       layout();
     }
-    document.getElementById('fsOpen').onclick = function () { haptic(); enterFs(); };
+    document.getElementById('fsOpen').onclick = function () { haptic(); enterFs(false); };
     document.getElementById('fsClose').onclick = function () { haptic(); exitFs(); };
     document.getElementById('fsFit').onclick = function () { haptic(); fit = (fit + 1) % 3; ls('fit', fit); layout(); wake(); toast(FITS[fit]); };
     fsbar.addEventListener('touchstart', wake, { passive: true });
-    window.addEventListener('resize', function onR() { if (!alive()) { window.removeEventListener('resize', onR); return; } layout(); });
 
-    // "abhi dekh raha hai" ke liye har 45 second ping
+    /* ----- turn the phone sideways = full screen, turn it back = normal ----- */
+    function landscape() {
+      var o = screen.orientation && screen.orientation.type;
+      return o ? o.indexOf('landscape') === 0 : window.innerWidth > window.innerHeight;
+    }
+    var wasLand = landscape(), rotT;
+    function onRotate() {
+      clearTimeout(rotT);
+      rotT = setTimeout(function () {
+        if (!alive()) return;
+        var land = landscape();
+        if (land === wasLand) return;
+        wasLand = land;
+        if (land && !isFs) enterFs(true);
+        else if (!land && isFs && autoFs) exitFs();
+      }, 150);
+    }
+    function onResize() { if (!alive()) { unbind(); return; } layout(); if (!(screen.orientation && screen.orientation.addEventListener)) onRotate(); }
+    function unbind() {
+      window.removeEventListener('resize', onResize);
+      window.removeEventListener('orientationchange', onRotate);
+      if (screen.orientation && screen.orientation.removeEventListener) screen.orientation.removeEventListener('change', onRotate);
+    }
+    window.addEventListener('resize', onResize);
+    var PHONE = TOUCH && Math.min(screen.width || 0, screen.height || 0) < 600;
+    if (PHONE) {
+      if (wasLand) setTimeout(function () { if (alive() && !isFs) enterFs(true); }, 0); // already sideways: open full screen
+      window.addEventListener('orientationchange', onRotate);
+      if (screen.orientation && screen.orientation.addEventListener) screen.orientation.addEventListener('change', onRotate);
+    }
+
+    // "watching now" ping every 45 seconds
     var ping = setInterval(function () {
-      if (!alive()) { clearInterval(ping); if (fsExit) exitFs(); return; }
+      if (!alive()) { clearInterval(ping); unbind(); if (fsExit) exitFs(); return; }
       if (!document.hidden) api('/api/ping', { method: 'POST', body: body }).catch(function () {});
     }, 45000);
     function info() {
@@ -912,27 +1014,38 @@ body.reading{overflow:hidden}
         bindSeasons(t, r, alive, r.episode);
       }).catch(function () {});
     }
+    // Next episode prepared in advance: the video starts while the details load
+    if (pre) { try { frame(); } catch (e) { pre = null; } }
+    lastPre = null;
     fetchPlay().then(function (d) {
       if (!alive()) return;
-      frame(); info(); seasonGrid();
+      if (!pre) frame();
+      info(); seasonGrid();
       if (r.meta) hist({ type: r.meta.type, slug: r.meta.slug, title: r.meta.title, poster: r.meta.poster, episode: r.episode || null, label: r.episode ? (d.label || '').split(' · ')[0] : '' });
     }).catch(function (e) {
       if (!alive() || gate(e, r, alive)) return;
+      if (fsExit) exitFs();
       app.innerHTML = empty('Video not available', errMsg(e), e.code === 'slow_down');
     });
     app.addEventListener('click', function (ev) {
       if (!alive() || !st) return;
       var b = ev.target.closest('[data-opt],[data-reload]');
       if (b) {
-        // same server dobara tap karo ya Reload dabao = video dobara load
-        haptic(); if (b.dataset.opt != null) { opt = +b.dataset.opt; ls('opt', opt); }
+        // tap the same server again, or Reload = load the video again
+        haptic();
+        if (b.dataset.opt != null) { opt = +b.dataset.opt; var o = st.options[opt]; if (o) ls('lang', o.label); }
         var fresh = Date.now() - st.at < (st.expires_in - 20) * 1000;
         mark();
         (fresh ? Promise.resolve() : fetchPlay()).then(function () { if (alive()) { frame(); mark(); } }).catch(function (e) { toast(errMsg(e)); });
         return;
       }
-      var n = ev.target.closest('[data-nav]');
-      if (n && st[n.dataset.nav]) { haptic('medium'); if (fsExit) exitFs(); go({ name: 'play', tab: r.tab, episode: st[n.dataset.nav], meta: r.meta }, { replace: true }); }
+      var nv = ev.target.closest('[data-nav]');
+      if (nv && st[nv.dataset.nav]) {
+        haptic('medium');
+        if (fsExit) exitFs();
+        var nextEp = st[nv.dataset.nav];
+        go({ name: 'play', tab: r.tab, episode: nextEp, meta: r.meta, pre: lastPre && lastPre.episode === nextEp ? lastPre : null }, { replace: true });
+      }
     });
   }
 
@@ -1181,12 +1294,12 @@ body.reading{overflow:hidden}
     });
 
     /* photos: paas wali pehle, door wali baad mein; na khule to backup link, phir "Tap to retry" */
-    var io;
+    var io, far;
     function loadImg(box) {
       if (box._started) return; box._started = true;
       var i = +box.dataset.i, p = pages[i], im = new Image(), tried = 0;
       im.decoding = 'async'; im.referrerPolicy = 'no-referrer'; im.alt = 'Page ' + (i + 1); im.draggable = false;
-      im.onload = function () { box.classList.add('ok'); var t = box.querySelector('.rt'); if (t) t.remove(); if (!im.parentNode) box.appendChild(im); };
+      im.onload = function () { box.style.height = ''; box.classList.add('ok'); var t = box.querySelector('.rt'); if (t) t.remove(); if (!im.parentNode) box.appendChild(im); };
       im.onerror = function () {
         tried++;
         if (tried === 1) { im.src = p.b; return; }
@@ -1201,6 +1314,16 @@ body.reading{overflow:hidden}
       for (var i = 0; i < Math.min(3, boxes.length); i++) loadImg(boxes[i]);
       io = new IntersectionObserver(function (en) { en.forEach(function (x) { if (x.isIntersecting) loadImg(x.target); }); }, { root: rs, rootMargin: '1800px 0px' });
       boxes.forEach(function (b) { io.observe(b); });
+      // long chapters: pages far away are let go (same height kept, so nothing jumps) and load again when you come back.
+      // stops weak phones running out of memory and closing the app.
+      far = new IntersectionObserver(function (en) {
+        en.forEach(function (x) {
+          var b = x.target, im = b.querySelector('img');
+          if (x.isIntersecting || !b._started || !im || !b.classList.contains('ok')) return;
+          b.style.height = b.offsetHeight + 'px'; im.remove(); b.classList.remove('ok'); b._started = false;
+        });
+      }, { root: rs, rootMargin: (LITE ? 5000 : 12000) + 'px 0px' });
+      boxes.forEach(function (b) { far.observe(b); });
     }
 
     /* progress + Continue reading */
@@ -1295,7 +1418,7 @@ body.reading{overflow:hidden}
     });
     function onResize() { if (zoom > 1) rz.style.width = (baseW() * zoom) + 'px'; }
     window.addEventListener('resize', onResize);
-    ov._cleanup = function () { if (io) io.disconnect(); window.removeEventListener('resize', onResize); clearTimeout(tapT); clearTimeout(saveTO); if (m && total) save(); };
+    ov._cleanup = function () { if (io) io.disconnect(); if (far) far.disconnect(); window.removeEventListener('resize', onResize); clearTimeout(tapT); clearTimeout(saveTO); if (m && total) save(); };
   }
 
   /* ---------- clicks ---------- */
@@ -1321,7 +1444,8 @@ body.reading{overflow:hidden}
     if ((el = t.closest('[data-ep]'))) {
       if (el.dataset.off) { toast(MSG.no_video); return; }
       haptic('medium');
-      var ep = { name: 'play', tab: current.tab, episode: el.dataset.ep, meta: current.meta };
+      var th = el.querySelector('.th img');
+      var ep = { name: 'play', tab: current.tab, episode: el.dataset.ep, meta: current.meta, thumb: th ? th.src : null, pre: lastPre && lastPre.episode === el.dataset.ep ? lastPre : null };
       if (current.name === 'play') go(ep, { replace: true }); else go(ep);
       return;
     }
