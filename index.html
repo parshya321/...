@@ -877,7 +877,7 @@ body.reading{overflow:hidden}
     var pre = r.pre && r.pre.episode === r.episode && Date.now() - r.pre.at < (r.pre.ttl - 30) * 1000 ? r.pre : null;
     var body = r.episode ? { episode: r.episode } : { movie: r.movie };
     var player = document.getElementById('player'), stage = player.querySelector('.stage'), fsbar = document.getElementById('fsbar');
-    var fit = ls('fit') || 0, isFs = false, autoFs = false, dimTimer;
+    var fit = 0, isFs = false, autoFs = false, suppress = false, rotDir = 1, dimTimer;
     function fetchPlay() { return api('/api/play', { method: 'POST', body: body }).then(function (d) { d.at = Date.now(); st = d; lastPre = d.pre ? Object.assign({ at: d.at, ttl: d.expires_in }, d.pre) : null; return d; }); }
     function opts() { return st ? st.options : pre.options; }
     function src() { return st ? st.player : pre.player; }
@@ -927,7 +927,7 @@ body.reading{overflow:hidden}
       var vw = window.innerWidth, vh = window.innerHeight;
       var rotate = vh > vw; // phone held upright: turn the video 90 degrees
       var W = rotate ? vh : vw, H = rotate ? vw : vh;
-      stage.style.cssText = 'width:' + W + 'px;height:' + H + 'px;transform:translate(-50%,-50%)' + (rotate ? ' rotate(90deg)' : '');
+      stage.style.cssText = 'width:' + W + 'px;height:' + H + 'px;transform:translate(-50%,-50%)' + (rotate ? ' rotate(' + 90 * rotDir + 'deg)' : '');
       if (!ifr) return;
       var ar = 16 / 9, w, h, sx = 1, sy = 1;
       if (fit === 0) { w = W; h = H; }                                                        // Fit: whole video, black edges
@@ -938,6 +938,7 @@ body.reading{overflow:hidden}
     function wake() { fsbar.classList.remove('dim'); clearTimeout(dimTimer); dimTimer = setTimeout(function () { fsbar.classList.add('dim'); }, 3000); }
     function v8() { return tg && tg.isVersionAtLeast && tg.isVersionAtLeast('8.0'); }
     function enterFs(auto) {
+      fit = 0; // full screen always opens on Fit; the user can switch after that
       isFs = true; autoFs = !!auto; player.classList.add('fs'); document.body.classList.add('lock');
       try { if (v8() && tg.requestFullscreen) tg.requestFullscreen(); } catch (e) {}
       // manual full screen keeps the phone's current side; auto (from rotating) must stay free to rotate back
@@ -945,8 +946,9 @@ body.reading{overflow:hidden}
       if (tg && tg.BackButton) tg.BackButton.show();
       fsExit = exitFs; layout(); wake();
     }
-    function exitFs() {
-      isFs = false; autoFs = false; fsExit = null; player.classList.remove('fs'); document.body.classList.remove('lock');
+    function exitFs(auto) {
+      if (auto !== true) suppress = true; // closed by the user: don't pop open again until the phone is held upright
+      isFs = false; autoFs = false; rotDir = 1; fsExit = null; player.classList.remove('fs'); document.body.classList.remove('lock');
       try { if (v8() && tg.isFullscreen && tg.exitFullscreen) tg.exitFullscreen(); } catch (e) {}
       try { if (v8() && tg.unlockOrientation) tg.unlockOrientation(); } catch (e) {}
       if (tg && tg.BackButton && !stack.length) tg.BackButton.hide();
@@ -954,7 +956,7 @@ body.reading{overflow:hidden}
     }
     document.getElementById('fsOpen').onclick = function () { haptic(); enterFs(false); };
     document.getElementById('fsClose').onclick = function () { haptic(); exitFs(); };
-    document.getElementById('fsFit').onclick = function () { haptic(); fit = (fit + 1) % 3; ls('fit', fit); layout(); wake(); toast(FITS[fit]); };
+    document.getElementById('fsFit').onclick = function () { haptic(); fit = (fit + 1) % 3; layout(); wake(); toast(FITS[fit]); };
     fsbar.addEventListener('touchstart', wake, { passive: true });
 
     /* ----- turn the phone sideways = full screen, turn it back = normal ----- */
@@ -970,8 +972,9 @@ body.reading{overflow:hidden}
         var land = landscape();
         if (land === wasLand) return;
         wasLand = land;
-        if (land && !isFs) enterFs(true);
-        else if (!land && isFs && autoFs) exitFs();
+        if (!land) suppress = false;
+        if (land && !isFs && !suppress) enterFs(true);
+        else if (!land && isFs && autoFs) exitFs(true);
       }, 150);
     }
     function onResize() { if (!alive()) { unbind(); return; } layout(); if (!(screen.orientation && screen.orientation.addEventListener)) onRotate(); }
@@ -988,9 +991,51 @@ body.reading{overflow:hidden}
       if (screen.orientation && screen.orientation.addEventListener) screen.orientation.addEventListener('change', onRotate);
     }
 
+    /* ----- tilt sensor: works even when the phone's auto-rotate is OFF -----
+       Phone held sideways for 0.8 s -> full screen (video turned to match the tilt).
+       Held upright again for 0.5 s -> back to normal.
+       Lying down / closed with X: it waits until the phone is upright again before it can open by itself. */
+    var sgn = 0, tiltSince = 0, upSince = 0, tiltSide = 0, gotMotion = false, tgAcc = false;
+    function tilt(x, y, z) {
+      if (!alive()) { stopSensor(); return; }
+      if (x == null || y == null) return;
+      var ax = Math.abs(x), ay = Math.abs(y), now = Date.now();
+      if (Math.abs(z || 0) > 8) { tiltSince = upSince = 0; return; } // lying flat on a table: ignore
+      if (ay > 7 && ay > ax * 1.6) {                                  // upright
+        if (!sgn) sgn = y > 0 ? 1 : -1;                               // learn this phone's sensor direction
+        tiltSince = 0; upSince = upSince || now;
+        if (now - upSince > 500) { suppress = false; if (isFs && autoFs && window.innerHeight > window.innerWidth) exitFs(true); }
+        return;
+      }
+      upSince = 0;
+      if (ax > 6.5 && ax > ay * 1.6) {                                // sideways
+        var side = (x > 0 ? 1 : -1) * (sgn || 1);
+        if (side !== tiltSide) { tiltSide = side; tiltSince = now; }
+        if (now - tiltSince < 800) return;
+        if (isFs && autoFs && window.innerHeight > window.innerWidth && rotDir !== side) { rotDir = side; layout(); return; } // turned to the other side
+        if (!isFs && !suppress && !landscape()) { rotDir = side; enterFs(true); }
+        return;
+      }
+      tiltSince = 0;
+    }
+    function onMotion(e) { var g = e.accelerationIncludingGravity; if (g && g.x != null) { gotMotion = true; tilt(g.x, g.y, g.z); } }
+    function onTgAcc() { var a = tg.Accelerometer; tilt(a.x, a.y, a.z); }
+    function stopSensor() {
+      window.removeEventListener('devicemotion', onMotion);
+      if (tgAcc) { try { tg.offEvent('accelerometerChanged', onTgAcc); tg.Accelerometer.stop(); } catch (e) {} tgAcc = false; }
+    }
+    if (PHONE) {
+      window.addEventListener('devicemotion', onMotion);
+      // iPhone gives the browser no motion data without asking, so use Telegram's own sensor there
+      setTimeout(function () {
+        if (!alive() || gotMotion || !(tg && tg.Accelerometer && v8())) return;
+        try { tg.onEvent('accelerometerChanged', onTgAcc); tg.Accelerometer.start({ refresh_rate: 200 }); tgAcc = true; } catch (e) {}
+      }, 1200);
+    }
+
     // "watching now" ping every 45 seconds
     var ping = setInterval(function () {
-      if (!alive()) { clearInterval(ping); unbind(); if (fsExit) exitFs(); return; }
+      if (!alive()) { clearInterval(ping); unbind(); stopSensor(); if (fsExit) exitFs(true); return; }
       if (!document.hidden) api('/api/ping', { method: 'POST', body: body }).catch(function () {});
     }, 45000);
     function info() {
