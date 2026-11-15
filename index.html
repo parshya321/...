@@ -632,7 +632,7 @@ body.reading{overflow:hidden}
   function skel(n) { var s = ''; for (var i = 0; i < n; i++) s += '<div class="card"><div class="pimg sk"></div><div class="sk skt"></div></div>'; return s; }
   function heading(t, more) { return '<div class="sh"><span class="bar"></span><h2>' + esc(t) + '</h2>' + (more ? '<button class="more" data-more="' + esc(more) + '">See all</button>' : '') + '</div>'; }
   function empty(h, p, retry) { return '<div class="empty"><h2>' + esc(h) + '</h2><p>' + esc(p) + '</p>' + (retry ? '<button class="btn dark" data-retry>Try again</button>' : '') + '</div>'; }
-  var LOGO = '<div class="logo"><div class="mark">' + ICON.inf + '</div><div class="wm">Infinite Animes</div><button class="sbtn" data-tab-go="search" aria-label="Search">' + ICON.search + '</button></div>';
+  var LOGO = '<div class="logo"><div class="mark">' + ICON.inf + '</div><div class="wm">Infinite Animes</div></div>';
 
   /* ---------- router ---------- */
   var stack = [], current = null, renderId = 0;
@@ -665,10 +665,10 @@ body.reading{overflow:hidden}
 
   /* ---------- HOME ---------- */
   function vHome(r, alive) {
-    app.innerHTML = LOGO + SEG() + '<div class="hero sk"></div>' + heading('Latest') + '<div class="grid">' + skel(6) + '</div>';
+    app.innerHTML = LOGO + SEG() + heading('Latest') + '<div class="grid">' + skel(6) + '</div>';
     api('/api/home').then(function (h) {
       if (!alive()) return;
-      var top = (h.hero && h.hero[0]) || (h.latest && h.latest[0]), cw = hist();
+      var cw = hist();
       var html = LOGO + SEG();
       if (h.languages && h.languages.length) {
         html += '<div class="langs">' + h.languages.slice(0, 8).map(function (l) {
@@ -676,10 +676,6 @@ body.reading{overflow:hidden}
         }).join('') + '</div>';
       }
       html += '<button class="sbar" data-tab-go="search" aria-label="Search">' + ICON.search + '<span>Search anime, series, movies</span></button>';
-      if (top) {
-        html += '<div class="hero"><div class="bg" style="background-image:url(\'' + esc(top.poster || '') + '\')"></div><div class="in"><div class="tag">' + (h.hero && h.hero.length ? 'Popular anime' + (top.genres && top.genres.length ? ' · ' + esc(top.genres.slice(0, 2).join(', ')) : '') : 'Just added') + '</div><h1>' +
-          esc(top.title) + '</h1><button class="btn white" data-open="' + esc(top.type) + '|' + esc(top.slug) + '">' + ICON.play + 'Watch now</button></div></div>';
-      }
       if (cw.length) html += heading('Continue watching') + '<div class="strip">' + cw.map(function (c) { return card(c, c.label); }).join('') + '</div>';
       if ((h.popular || []).length > 1) html += heading('Popular anime') + '<div class="strip">' + h.popular.slice(1).map(function (c) { return card(c); }).join('') + '</div>';
       html += heading('Latest', 'all|') + '<div class="grid">' + (h.latest || []).slice(0, 12).map(function (c) { return card(c); }).join('') + '</div>';
