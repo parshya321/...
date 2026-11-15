@@ -99,6 +99,8 @@ button:focus-visible,input:focus-visible{outline:2px solid #fff;outline-offset:2
 
 /* search */
 .searchbar{position:sticky;top:0;z-index:20;background:rgba(0,0,0,.94);padding:12px var(--pad)}
+.sbar{display:flex;align-items:center;gap:10px;width:calc(100% - 2*var(--pad));margin:14px var(--pad) 0;height:48px;border:1.5px solid #fff;border-radius:999px;padding:0 18px;color:var(--dim);font:500 16px var(--font);text-align:left}
+.sbar svg{width:20px;height:20px;flex:none;color:#fff}
 .sbox{display:flex;align-items:center;gap:10px;height:48px;border:1.5px solid #fff;border-radius:999px;padding:0 18px}
 .sbox input{flex:1;min-width:0;background:none;border:0;outline:0;color:#fff;font:500 16px var(--font)}
 .sbox input::placeholder{color:var(--dim)}
@@ -673,6 +675,7 @@ body.reading{overflow:hidden}
           return '<button class="lang" data-lang="' + esc(l.name) + '"><b>' + esc(l.name) + '</b><small>' + esc(LANG_NATIVE[l.name] || l.n + ' titles') + '</small></button>';
         }).join('') + '</div>';
       }
+      html += '<button class="sbar" data-tab-go="search" aria-label="Search">' + ICON.search + '<span>Search anime, series, movies</span></button>';
       if (top) {
         html += '<div class="hero"><div class="bg" style="background-image:url(\'' + esc(top.poster || '') + '\')"></div><div class="in"><div class="tag">' + (h.hero && h.hero.length ? 'Popular anime' + (top.genres && top.genres.length ? ' · ' + esc(top.genres.slice(0, 2).join(', ')) : '') : 'Just added') + '</div><h1>' +
           esc(top.title) + '</h1><button class="btn white" data-open="' + esc(top.type) + '|' + esc(top.slug) + '">' + ICON.play + 'Watch now</button></div></div>';
@@ -690,14 +693,23 @@ body.reading{overflow:hidden}
 
   /* ---------- LIST ---------- */
   function vList(r, alive) {
-    var name = r.genre || r.lang || (r.type === 'series' ? 'Series' : r.type === 'movie' ? 'Movies' : 'All titles');
+    var name = r.genre || r.lang || (r.collection === 'shinchan' ? 'Shinchan movies' : r.collection === 'doraemon' ? 'Doraemon movies' : '') || (r.type === 'series' ? 'Series' : r.type === 'movie' ? 'Movies' : 'All titles');
     app.innerHTML = '<div class="ph"><h1>' + esc(name) + '</h1><p id="cnt">&nbsp;</p></div><div class="chips sorts" id="sorts">' +
       [['', 'Latest'], ['az', 'A to Z'], ['year', 'Year']].map(function (s) { return '<button class="chip' + ((r.sort || '') === s[0] ? ' on' : '') + '" data-sort="' + s[0] + '">' + s[1] + '</button>'; }).join('') +
       '</div><div class="grid" id="grid">' + skel(9) + '</div><div class="sentinel" id="sen"></div>';
+    // Movies page: Shinchan and Doraemon movies shown right at the top
+    if (r.type === 'movie' && !r.genre && !r.lang && !r.collection) {
+      api('/api/home').then(function (h) {
+        if (!alive() || !(h.collections || []).length) return;
+        var box = document.createElement('div');
+        box.innerHTML = h.collections.map(function (c) { return heading(c.title, 'col|' + c.key) + '<div class="strip">' + c.items.map(function (x) { return card(x); }).join('') + '</div>'; }).join('') + heading('All movies');
+        var so = document.getElementById('sorts'); if (so && so.parentNode) so.parentNode.insertBefore(box, so);
+      }).catch(function () {});
+    }
     var page = 0, busy = false, done = false, first = true, grid = document.getElementById('grid');
     function load() {
       if (busy || done) return; busy = true; page++;
-      var qs = 'page=' + page + (r.type ? '&type=' + r.type : '') + (r.genre ? '&genre=' + encodeURIComponent(r.genre) : '') + (r.lang ? '&lang=' + encodeURIComponent(r.lang) : '') + (r.sort ? '&sort=' + r.sort : '');
+      var qs = 'page=' + page + (r.type ? '&type=' + r.type : '') + (r.genre ? '&genre=' + encodeURIComponent(r.genre) : '') + (r.lang ? '&lang=' + encodeURIComponent(r.lang) : '') + (r.sort ? '&sort=' + r.sort : '') + (r.collection ? '&collection=' + r.collection : '');
       api('/api/list?' + qs).then(function (d) {
         if (!alive()) return;
         if (first) { first = false; grid.innerHTML = ''; document.getElementById('cnt').textContent = d.total + ' titles'; if (!d.total) grid.outerHTML = empty('Nothing here', 'Try another genre or language.'); }
@@ -1497,6 +1509,7 @@ body.reading{overflow:hidden}
     if ((el = t.closest('[data-playmovie]'))) { haptic('medium'); go({ name: 'play', tab: current.tab, movie: el.dataset.playmovie, meta: current.meta }); return; }
     if ((el = t.closest('[data-more]'))) {
       haptic(); var m = el.dataset.more.split('|');
+      if (m[0] === 'col') { go({ name: 'list', tab: 'movie', type: 'movie', collection: m[1] }); return; }
       if (m[0] === 'lib') { go({ name: 'mlib', tab: 'mlib' }, { root: true }); return; }
       if (m[0] === 'mall') { go({ name: 'mlist', tab: 'mbrowse' }); return; }
       if (m[0] === 'mtype') { go({ name: 'mlist', tab: 'mbrowse', mtype: m[1] }); return; }

@@ -128,6 +128,9 @@ const store = {
 };
 // "anime" = Japanese audio wala title (cartoon / western animation nahi)
 const isAnime = (t) => (t.languages || []).some((l) => String(l).toLowerCase() === 'japanese');
+// Movie collections shown on the Movies page
+const COLLECTIONS = { shinchan: /shin[\s-]*chan/i, doraemon: /dor[ae][\s-]*e?mon/i };
+const COLLECTION_NAMES = { shinchan: 'Shinchan movies', doraemon: 'Doraemon movies' };
 const NOT_A_GENRE = /^(animation|anime)$/i; // har title animated hai, iska row bekaar
 
 function isAdult(doc) {
@@ -182,9 +185,14 @@ function buildStore(docs) {
     hero: popular.slice(0, 5).map((t) => Object.assign(card(t), { backdrop: t.backdrop || null, genres: t.genres.slice(0, 3) })),
     popular: popular.slice(0, 20).map(card),
     latestAnime: anime.slice(0, 20).map(card),
-    latest: safe.slice(0, 20).map(card),
-    series: safe.filter((t) => t.type === 'series').slice(0, 20).map(card),
-    movies: safe.filter((t) => t.type === 'movie').slice(0, 20).map(card),
+    // Home shows anime only (no cartoons / western animated films)
+    latest: anime.slice(0, 20).map(card),
+    series: anime.filter((t) => t.type === 'series').slice(0, 20).map(card),
+    movies: anime.filter((t) => t.type === 'movie').slice(0, 20).map(card),
+    collections: Object.keys(COLLECTIONS).map((k) => ({
+      key: k, title: COLLECTION_NAMES[k],
+      items: safe.filter((t) => t.type === 'movie' && COLLECTIONS[k].test(t.title)).slice(0, 20).map(card),
+    })).filter((c) => c.items.length),
     rows,
     genres, languages,
     total: { series: safe.filter((t) => t.type === 'series').length, movies: safe.filter((t) => t.type === 'movie').length },
@@ -223,8 +231,9 @@ function search(q, { includeAdult, page }) {
   };
 }
 
-function listTitles({ type, genre, lang, sort, page }) {
+function listTitles({ type, genre, lang, sort, page, collection }) {
   let arr = store.list.filter((t) => !t.adult);
+  if (collection && COLLECTIONS[collection]) arr = arr.filter((t) => t.type === 'movie' && COLLECTIONS[collection].test(t.title));
   if (type === 'series' || type === 'movie') arr = arr.filter((t) => t.type === type);
   if (genre) { const g = genre.toLowerCase(); arr = arr.filter((t) => t.genres.some((x) => x.toLowerCase() === g)); }
   if (lang) { const l = lang.toLowerCase(); arr = arr.filter((t) => t.languages.some((x) => x.toLowerCase() === l)); }
@@ -838,7 +847,7 @@ function createHandler(db) {
       if (p === '/api/list' && req.method === 'GET') {
         return json(req, res, 200, listTitles({
           type: q.get('type'), genre: (q.get('genre') || '').slice(0, 60), lang: (q.get('lang') || '').slice(0, 40),
-          sort: q.get('sort'), page: +q.get('page') || 1,
+          sort: q.get('sort'), page: +q.get('page') || 1, collection: (q.get('collection') || '').slice(0, 20),
         }), 60);
       }
 
