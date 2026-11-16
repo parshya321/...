@@ -538,6 +538,11 @@ body.reading{overflow:hidden}
   'use strict';
   var tg = window.Telegram && window.Telegram.WebApp;
   var initData = tg ? tg.initData : '';
+  // Some phones / networks don't load Telegram's script, but Telegram still passes the login data in the link: read it from there
+  if (!initData) {
+    try { initData = new URLSearchParams(location.hash.replace(/^#/, '')).get('tgWebAppData') || ''; } catch (e) {}
+    try { if (initData) sessionStorage.setItem('ia_init', initData); else initData = sessionStorage.getItem('ia_init') || ''; } catch (e) {}
+  }
   var app = document.getElementById('app');
   var nav = document.getElementById('nav');
   if (tg) {
@@ -585,6 +590,7 @@ body.reading{overflow:hidden}
     no_video: 'This episode has no video yet.',
     not_found: 'This title was not found.',
     age_blocked: 'This title is 18+ and not available for you.',
+    guest_adult: '18+ titles open only inside Telegram. Open the app from the bot to see them.',
   };
   function errMsg(e) { return MSG[e && e.code] || 'Could not load. Check your internet and try again.'; }
 
@@ -842,7 +848,7 @@ body.reading{overflow:hidden}
       if (t.type === 'series' && t.seasons.length) bindSeasons(t, r, alive);
     }).catch(function (e) {
       if (!alive() || gate(e, r, alive)) return;
-      app.innerHTML = empty(e.code === 'age_blocked' ? 'Not available' : 'Could not load', errMsg(e), e.code !== 'age_blocked' && e.code !== 'not_found');
+      app.innerHTML = empty((e.code === 'age_blocked' || e.code === 'guest_adult') ? 'Not available' : 'Could not load', errMsg(e), e.code !== 'age_blocked' && e.code !== 'guest_adult' && e.code !== 'not_found');
     });
   }
 
@@ -1283,7 +1289,7 @@ body.reading{overflow:hidden}
       });
     }).catch(function (e) {
       if (!alive() || gate(e, r, alive)) return;
-      app.innerHTML = empty(e.code === 'age_blocked' ? 'Not available' : 'Could not load', e.code === 'not_found' ? 'This manga was not found.' : errMsg(e), e.code !== 'age_blocked' && e.code !== 'not_found');
+      app.innerHTML = empty((e.code === 'age_blocked' || e.code === 'guest_adult') ? 'Not available' : 'Could not load', e.code === 'not_found' ? 'This manga was not found.' : errMsg(e), e.code !== 'age_blocked' && e.code !== 'guest_adult' && e.code !== 'not_found');
     });
   }
 
@@ -1528,11 +1534,6 @@ body.reading{overflow:hidden}
     else go({ name: 'list', tab: tab, type: tab }, { root: true });
   });
 
-  if (!initData) {
-    nav.classList.add('hidden');
-    app.innerHTML = LOGO.replace(/<button[\s\S]*?<\/button>/, '') + empty('Open in Telegram', 'This app only works inside Telegram. Open the bot and tap "Watch Anime".');
-    return;
-  }
   buildNav();
   go(mode === 'manga' ? { name: 'mhome', tab: 'mhome' } : { name: 'home', tab: 'home' }, { root: true });
   var sp = tg && tg.initDataUnsafe && tg.initDataUnsafe.start_param;

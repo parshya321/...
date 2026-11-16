@@ -273,6 +273,7 @@ async function getUser(db, tgUser) {
 }
 
 async function banUser(db, id, reason) {
+  if (String(id).startsWith('g:')) return; // guests share IPs: slowed down, never banned
   if (banned.has(id)) return;
   banned.add(id);
   const u = users.get(id); if (u) u.banned = true;
@@ -634,7 +635,16 @@ function createHandler(db) {
     const h = String(req.headers.authorization || '');
     const initData = h.startsWith('tma ') ? h.slice(4) : String(req.headers['x-init-data'] || '');
     const auth = checkInitData(initData, CFG.botToken, CFG.initDataMaxAge);
-    if (!auth) { fail(req, res, 401, 'telegram_only'); return null; }
+    if (!auth) {
+      // Guest: opened outside Telegram, or Telegram did not pass login data (some phones / networks).
+      // The app still opens. Guests never see 18+ titles, are never banned (many people share one
+      // mobile-network IP), and are only slowed down when they send too many requests.
+      const ip = clientIp(req);
+      const gid = 'g:' + crypto.createHash('sha1').update(ip + '|' + String(req.headers['user-agent'] || '')).digest('hex').slice(0, 12);
+      const ga = W.api.hit(gid);
+      if (ga.count > CFG.lim.apiPerMin) { fail(req, res, 429, 'slow_down', { retry: Math.ceil((ga.reset - Date.now()) / 1000) }); return null; }
+      return { id: gid, user: { id: gid, first_name: 'Guest' }, u: { age: 'minor', banned: false, seenWrite: 0, guest: true }, guest: true };
+    }
     const id = String(auth.user.id);
     if (banned.has(id)) { fail(req, res, 403, 'banned'); return null; }
     const a = W.api.hit(id);
@@ -653,6 +663,7 @@ function createHandler(db) {
   function ageGate(req, res, t, ctx) {
     if (!t.adult) return true;
     if (ctx.u.age === 'adult') return true;
+    if (ctx.guest) { fail(req, res, 403, 'guest_adult'); return false; }
     fail(req, res, 403, ctx.u.age === 'minor' ? 'age_blocked' : 'age_required');
     return false;
   }
@@ -822,6 +833,7 @@ function createHandler(db) {
       if (p === '/api/age' && req.method === 'POST') {
         const body = await readJson(req);
         if (ctx.u.age === 'minor') return fail(req, res, 403, 'age_locked'); // ek baar "18 se kam" chuna to badal nahi sakte
+        if (ctx.guest) return fail(req, res, 403, 'guest_adult'); // age can only be set from inside Telegram
         const age = body.adult === true ? 'adult' : body.adult === false ? 'minor' : null;
         if (!age) return fail(req, res, 400, 'bad_request');
         ctx.u.age = age;
