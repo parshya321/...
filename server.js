@@ -337,12 +337,16 @@ function makeToken(userId, opts) {
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
 function origin(u) { try { return new URL(u).origin; } catch (e) { return ''; } }
-function playerHtml(src) {
+// compat = for hosts that refuse to play inside a sandbox or without knowing which site they are on:
+// no sandbox, and the host is told our own site name (nothing else). Used when the user taps Reload.
+function playerHtml(src, compat) {
+  const rp = compat ? 'origin' : 'no-referrer';
+  const sb = compat ? '' : ' sandbox="allow-scripts allow-same-origin allow-presentation"';
   return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<meta name="referrer" content="no-referrer"><title>Player</title>${origin(src) ? `<link rel="preconnect" href="${esc(origin(src))}"><link rel="dns-prefetch" href="${esc(origin(src))}">` : ''}
+<meta name="referrer" content="${rp}"><title>Player</title>${origin(src) ? `<link rel="preconnect" href="${esc(origin(src))}"><link rel="dns-prefetch" href="${esc(origin(src))}">` : ''}
 <style>html,body{margin:0;height:100%;background:#000;overflow:hidden}iframe{position:fixed;inset:0;width:100%;height:100%;border:0}</style>
 </head><body oncontextmenu="return false">
-<iframe src="${esc(src)}" sandbox="allow-scripts allow-same-origin allow-presentation" referrerpolicy="no-referrer"
+<iframe src="${esc(src)}"${sb} referrerpolicy="${rp}"
  allow="autoplay; fullscreen; encrypted-media; picture-in-picture" allowfullscreen></iframe>
 </body></html>`;
 }
@@ -812,7 +816,7 @@ function createHandler(db) {
         const o = Math.max(0, Math.min(tok.src.length - 1, +url.searchParams.get('o') || 0));
         let early = {};
         try { early = { link: `<${new URL(tok.src[o]).origin}>; rel=preconnect` }; } catch (e) { /* bad url: skip */ }
-        return send(req, res, 200, playerHtml(tok.src[o]), {
+        return send(req, res, 200, playerHtml(tok.src[o], url.searchParams.get('c') === '1'), {
           ...early,
           'content-type': 'text/html; charset=utf-8',
           'cache-control': 'no-store',

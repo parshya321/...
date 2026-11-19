@@ -881,13 +881,15 @@ body.reading{overflow:hidden}
     return best.n;
   }
   var lastPre = null; // next episode, already prepared by the server
+  // servers that only play in compatible mode (remembered after the user taps Reload and it works)
+  var CMP = ls('cmp') || {};
 
   function vPlay(r, alive) {
     var cov = r.thumb || (r.meta && (r.meta.backdrop || r.meta.poster)) || '';
     app.innerHTML = '<div class="player" id="player"><div class="stage"><div class="frame"><div class="wait" id="pwait">' + (cov ? '<img src="' + esc(cov) + '" alt="" decoding="async">' : '') + '<div class="spin"></div><span>Loading video</span></div></div>' +
       '<button class="fsbtn" id="fsOpen" aria-label="Full screen">' + ICON.full + '</button>' +
       '<div class="fsbar" id="fsbar"><button id="fsFit">' + ICON.fit + '<span>Fit</span></button><button id="fsClose" aria-label="Exit full screen">' + ICON.close + '</button></div></div></div><div id="pbody"></div>';
-    var opt = null, st = null;
+    var opt = null, st = null, forceCompat = false;
     var pre = r.pre && r.pre.episode === r.episode && Date.now() - r.pre.at < (r.pre.ttl - 30) * 1000 ? r.pre : null;
     var body = r.episode ? { episode: r.episode } : { movie: r.movie };
     var player = document.getElementById('player'), stage = player.querySelector('.stage'), fsbar = document.getElementById('fsbar');
@@ -909,11 +911,13 @@ body.reading{overflow:hidden}
       ifr.setAttribute('referrerpolicy', 'no-referrer');
       ifr.title = (st && st.title) || 'Video';
       // not open in 10 s: try once more, then show whatever is there
-      var tries = 0, guard, t0;
+      var tries = 0, guard, t0, compat = !!(o.h && CMP[o.h]) || forceCompat;
+      forceCompat = false;
       function reveal() { if (ifr.isConnected) wait.classList.add('gone'); }
       function load() {
         clearTimeout(guard); t0 = performance.now();
-        ifr.src = src() + '?o=' + n + '&r=' + Date.now();
+        ifr.src = src() + '?o=' + n + (compat ? '&c=1' : '') + '&r=' + Date.now();
+        if (compat && o.h && !CMP[o.h]) { CMP[o.h] = 1; ls('cmp', CMP); }
         guard = setTimeout(function () {
           if (!alive() || !ifr.isConnected) return;
           noteSpeed(o.h, 0, true);
@@ -1059,7 +1063,7 @@ body.reading{overflow:hidden}
         '<button class="btn white" data-nav="next"' + (st.next ? '' : ' disabled') + '>Next' + ICON.next + '</button></div>';
       html += heading('Select server') + '<div class="servers" id="srv">' + st.options.map(function (o) {
         return '<button class="srv' + (o.n === n ? ' on' : '') + '" data-opt="' + o.n + '"><b>Server ' + (o.n + 1) + '</b><small>' + esc(o.label || '') + '</small></button>';
-      }).join('') + '</div><p class="note">Video stuck? <button class="relink" data-reload="1">Reload</button> or try another server.</p>';
+      }).join('') + '</div><p class="note">Video not playing or showing an error? <button class="relink" data-reload="1">Reload</button> or try another server.</p>';
       if (r.meta && r.meta.type === 'series') html += '<div id="more"></div>';
       document.getElementById('pbody').innerHTML = html;
     }
@@ -1092,7 +1096,10 @@ body.reading{overflow:hidden}
       if (b) {
         // tap the same server again, or Reload = load the video again
         haptic();
+        var same = b.dataset.opt != null && +b.dataset.opt === opt;
         if (b.dataset.opt != null) { opt = +b.dataset.opt; var o = st.options[opt]; if (o) ls('lang', o.label); }
+        // Reload, or tapping the server that is already on = the video didn't play: open it in compatible mode
+        if (b.dataset.reload != null || same) forceCompat = true;
         var fresh = Date.now() - st.at < (st.expires_in - 20) * 1000;
         mark();
         (fresh ? Promise.resolve() : fetchPlay()).then(function () { if (alive()) { frame(); mark(); } }).catch(function (e) { toast(errMsg(e)); });
