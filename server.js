@@ -810,6 +810,28 @@ function createHandler(db) {
 
       if (p === `/tg/${CFG.webhookSecret}` && req.method === 'POST' && CFG.webhookSecret) return await webhook(req, res);
 
+      // Temporary test page: do these video hosts play inside OUR site? (remove after testing)
+      if (p === '/ztest') {
+        const tests = [
+          ['Zephyrix (Server 1)', 'https://play.zephyrix.org/video/64c32b8eb5304d80ba093227975ece13'],
+          ['Abyss Hindi (Server 2)', 'https://player.abyssplayer.com/4VL4zDfX7'],
+          ['Abyss English (Server 2)', 'https://player.abyssplayer.com/SOtgCy3hI'],
+        ];
+        const html = `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex"><title>Host test</title>
+<style>body{margin:0;background:#000;color:#fff;font:15px system-ui,sans-serif;padding:14px}h2{font-size:15px;margin:22px 0 8px}.box{position:relative;aspect-ratio:16/9;background:#111;border-radius:10px;overflow:hidden}iframe{position:absolute;inset:0;width:100%;height:100%;border:0}
+.row{display:flex;gap:8px;margin-top:8px}button{flex:1;padding:10px;border-radius:999px;border:1.5px solid #fff;background:#000;color:#fff;font:600 14px system-ui}button.on{background:#fff;color:#000}.s{margin-top:6px;color:#aaa;font-size:13px}</style></head><body>
+<b>Host test</b><div class="s">Tap Play on each one. Screenshot what you see and send it.</div>
+${tests.map((t, i) => `<h2>${esc(t[0])}</h2><div class="box" id="b${i}"></div>
+<div class="row"><button onclick="go(${i},1)">Play in sandbox</button><button onclick="go(${i},0)">Play without sandbox</button></div><div class="s" id="s${i}">not started</div>`).join('')}
+<script>var U=${JSON.stringify(tests.map((t) => t[1]))};
+function go(i,sb){var b=document.getElementById('b'+i);b.innerHTML='';var f=document.createElement('iframe');
+f.setAttribute('allow','autoplay; fullscreen; encrypted-media; picture-in-picture');f.setAttribute('allowfullscreen','');
+if(sb){f.setAttribute('sandbox','allow-scripts allow-same-origin allow-presentation');f.setAttribute('referrerpolicy','no-referrer')}else{f.setAttribute('referrerpolicy','origin')}
+f.onload=function(){document.getElementById('s'+i).textContent='loaded ('+(sb?'sandbox, no referrer':'no sandbox, referrer = this site')+') - did the video play?'};
+f.src=U[i];b.appendChild(f);document.getElementById('s'+i).textContent='loading...'}</script></body></html>`;
+        return send(req, res, 200, html, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' });
+      }
+
       if (p.startsWith('/p/')) {
         const tok = tokens.get(p.slice(3));
         if (!tok || Date.now() > tok.exp) return send(req, res, 410, '<!doctype html><body style="background:#000;color:#aaa;font:14px sans-serif;display:grid;place-items:center;height:100vh;margin:0">This link has expired. Go back and tap play again.</body>', { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' });
